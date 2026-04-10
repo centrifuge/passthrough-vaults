@@ -148,8 +148,7 @@ contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
             : MathLib.min(_assetsToShares(assets, MathLib.Rounding.Up), claimable);
         require(shares > 0, InsufficientClaimableShares());
 
-        uint256 netAssets = _redeem(shares.toUint128(), receiver, controller);
-        emit Withdraw(msg.sender, receiver, controller, netAssets, shares);
+        _redeem(shares.toUint128(), receiver, controller);
     }
 
     /// @inheritdoc IERC7575
@@ -161,7 +160,6 @@ contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
 
         uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
         assets = _redeem(actualShares.toUint128(), receiver, controller);
-        emit Withdraw(msg.sender, receiver, controller, assets, actualShares);
     }
 
     //----------------------------------------------------------------------------------------------
@@ -293,6 +291,7 @@ contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
         uint256 grossAssets = vault.redeem(shares, address(this), address(this));
         if (grossAssets > 0) SafeTransferLib.safeTransfer(asset, receiver, grossAssets);
         assets = grossAssets.toUint128();
+        emit Withdraw(msg.sender, receiver, controller, assets, shares);
     }
 
     function _sharesToAssets(uint256 shares, MathLib.Rounding rounding) internal view returns (uint256) {
