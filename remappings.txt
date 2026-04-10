@@ -1,0 +1,4 @@
+forge-std/=lib/forge-std/src/
+protocol-v3/=lib/protocol/src/
+protocol/=lib/protocol/src/
+protocol-test/=lib/protocol/test/
