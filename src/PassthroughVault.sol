@@ -5,13 +5,14 @@ import {SyncDepositVault} from "protocol/vaults/SyncDepositVault.sol";
 import {
     IPassthroughVault,
     IPassthroughVaultFactory,
-    IPassthroughRedeemVault,
+    IAsyncRedeemVault,
     RedeemPosition
 } from "./interfaces/IPassthroughVault.sol";
 
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
 import {IERC165} from "protocol/misc/interfaces/IERC165.sol";
 import {IERC7575} from "protocol/misc/interfaces/IERC7575.sol";
+import {IERC20} from "protocol/misc/interfaces/IERC20.sol";
 import {SafeTransferLib} from "protocol/misc/libraries/SafeTransferLib.sol";
 import {IERC7540Redeem, IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
@@ -32,8 +33,6 @@ import {IERC7540Redeem, IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
 contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
-
-    uint256 internal constant REQUEST_ID = 0;
 
     SyncDepositVault public immutable vault;
 
@@ -105,7 +104,7 @@ contract PassthroughVault is IPassthroughVault {
     // Async redeem
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IPassthroughRedeemVault
+    /// @inheritdoc IAsyncRedeemVault
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256) {
         require(owner == msg.sender, InvalidOwner());
         require(isPermissioned(controller), NotMember());
@@ -116,9 +115,7 @@ contract PassthroughVault is IPassthroughVault {
         // Force-claim any settled balance so the controller receives assets from previous
         // settlements before their position moves to the back of the queue.
         uint128 claimable = _claimableRedeemShares(controller);
-        if (claimable > 0) {
-            _redeem(claimable, controller, controller);
-        }
+        if (claimable > 0) _redeem(claimable, controller, controller);
 
         // Place the combined position (any unsettled remainder + new shares) at the back of the global queue.
         // cumulativeRedeemRequested advances by the new shares only; the unsettled remainder is carried forward
@@ -134,10 +131,10 @@ contract PassthroughVault is IPassthroughVault {
         SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
 
         // This vault is both controller and owner in the underlying vault.
-        vault.requestRedeem(shares_, address(this), address(this));
+        uint256 requestId = vault.requestRedeem(shares_, address(this), address(this));
 
-        emit RedeemRequest(controller, owner, REQUEST_ID, msg.sender, shares_);
-        return REQUEST_ID;
+        emit RedeemRequest(controller, owner, requestId, msg.sender, shares_);
+        return requestId;
     }
 
     /// @inheritdoc IERC7575
@@ -195,12 +192,12 @@ contract PassthroughVault is IPassthroughVault {
     // ERC-7540 redeem views
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IPassthroughRedeemVault
+    /// @inheritdoc IAsyncRedeemVault
     function pendingRedeemRequest(uint256, address controller) external view returns (uint256) {
         return redeemPosition[controller].pending - _claimableRedeemShares(controller);
     }
 
-    /// @inheritdoc IPassthroughRedeemVault
+    /// @inheritdoc IAsyncRedeemVault
     function claimableRedeemRequest(uint256, address controller) external view returns (uint256) {
         return _claimableRedeemShares(controller);
     }
@@ -210,8 +207,8 @@ contract PassthroughVault is IPassthroughVault {
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IERC7575
-    function totalAssets() external pure returns (uint256) {
-        return 0;
+    function totalAssets() external view returns (uint256) {
+        return vault.convertToAssets(IERC20(share).totalSupply());
     }
 
     /// @inheritdoc IERC7575
