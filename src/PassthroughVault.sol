@@ -68,11 +68,8 @@ contract PassthroughVault is IPassthroughVault {
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IERC7575
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
-        require(isPermissioned(msg.sender), NotMember());
-
+    function deposit(uint256 assets, address receiver) external permissioned(msg.sender) returns (uint256 shares) {
         uint128 assets_ = assets.toUint128();
-        require(assets_ != 0, ZeroAmountNotAllowed());
 
         // Deposit to underlying vault, claiming to this vault first (avoids transfer-restriction
         // membership check on receiver), then forward shares to the actual receiver.
@@ -84,11 +81,8 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IERC7575
-    function mint(uint256 shares, address receiver) external returns (uint256 assets) {
-        require(isPermissioned(msg.sender), NotMember());
-
+    function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
         uint128 shares_ = shares.toUint128();
-        require(shares_ != 0, ZeroAmountNotAllowed());
 
         assets = vault.previewMint(shares_);
         SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets);
@@ -105,28 +99,21 @@ contract PassthroughVault is IPassthroughVault {
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IAsyncRedeemVault
-    function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256) {
+    function requestRedeem(uint256 shares, address controller, address owner)
+        external
+        permissioned(controller)
+        returns (uint256)
+    {
         require(owner == msg.sender, InvalidOwner());
-        require(isPermissioned(controller), NotMember());
 
         uint128 shares_ = shares.toUint128();
-        require(shares_ != 0, ZeroAmountNotAllowed());
 
         // Force-claim any settled balance so the controller receives assets from previous
         // settlements before their position moves to the back of the queue.
         uint128 claimable = _claimableRedeemShares(controller);
         if (claimable > 0) _redeem(claimable, controller, controller);
 
-        // Place the combined position (any unsettled remainder + new shares) at the back of the global queue.
-        // cumulativeRedeemRequested advances by the new shares only; the unsettled remainder is carried forward
-        // without re-expanding the queue. The previously unsettled portion leads to a segment of orphaned shares
-        // and a segment of overlapping shares in the queue, equal in size. The orphaned shares will eventually be
-        // claimable by this controller once the settlement advances past the overlapping segment, resulting only in
-        // a delay for this controller and no disadvantage to others in the queue.
-        RedeemPosition storage pos = redeemPosition[controller];
-        pos.rangeStart = uint128(cumulativeRedeemRequested) - pos.pending;
-        pos.pending += shares_;
-        cumulativeRedeemRequested += shares_;
+        _enqueueRedeem(controller, shares_);
 
         SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
 
@@ -259,6 +246,11 @@ contract PassthroughVault is IPassthroughVault {
     // ERC-7714
     //----------------------------------------------------------------------------------------------
 
+    modifier permissioned(address controller) {
+        require(isPermissioned(controller), NotMember());
+        _;
+    }
+
     /// @inheritdoc IERC7714
     function isPermissioned(address controller) public view returns (bool) {
         if (address(memberlist) == address(0)) return true;
@@ -280,6 +272,20 @@ contract PassthroughVault is IPassthroughVault {
         if (settled <= pos.rangeStart) return 0;
         uint128 claimable = settled - pos.rangeStart;
         return pos.pending > claimable ? claimable : pos.pending;
+    }
+
+    /// @dev Place the combined position (any unsettled remainder + new shares) at the back of the
+    ///      global queue. cumulativeRedeemRequested advances by the new shares only; the unsettled
+    ///      remainder is carried forward without re-expanding the queue. Any previously unsettled
+    ///      portion leads to a segment of orphaned shares and a segment of overlapping shares in the
+    ///      queue, equal in size. The orphaned shares will eventually be claimable by this controller,
+    ///      once the settlement advances past the overlapping segment, resulting only in a delay for
+    ///      this controller and no disadvantage to others in the queue.
+    function _enqueueRedeem(address controller, uint128 shares) internal {
+        RedeemPosition storage pos = redeemPosition[controller];
+        pos.rangeStart = uint128(cumulativeRedeemRequested) - pos.pending;
+        pos.pending += shares;
+        cumulativeRedeemRequested += shares;
     }
 
     function _redeem(uint128 shares, address receiver, address controller) private returns (uint128 assets) {

@@ -33,7 +33,6 @@ interface IAsyncRedeemVault {
 /// @dev    The passthrough vault is the sole controller/owner in the underlying Centrifuge vault.
 ///         Investors hold the underlying share token directly and interact only with this contract.
 interface IPassthroughVault is IAsyncRedeemVault, IERC7575, IERC7714 {
-    error ZeroAmountNotAllowed();
     error InvalidOwner();
     error InvalidController();
     error NotMember();

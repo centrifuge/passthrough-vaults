@@ -95,12 +95,6 @@ contract PassthroughVaultDepositTest is PassthroughVaultTest {
         assertEq(asset.balanceOf(USER), 0);
     }
 
-    function testErrZeroAmountNotAllowed() public {
-        vm.prank(USER);
-        vm.expectRevert(IPassthroughVault.ZeroAmountNotAllowed.selector);
-        vault.deposit(0, RECEIVER);
-    }
-
     function testErrNotMember() public {
         vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector, USER), abi.encode(false));
 
@@ -138,12 +132,6 @@ contract PassthroughVaultMintTest is PassthroughVaultTest {
 
         assertEq(assets, previewAssets);
         assertEq(asset.balanceOf(USER), 0);
-    }
-
-    function testErrZeroAmountNotAllowed() public {
-        vm.prank(USER);
-        vm.expectRevert(IPassthroughVault.ZeroAmountNotAllowed.selector);
-        vault.mint(0, RECEIVER);
     }
 
     function testErrNotMember() public {
@@ -269,12 +257,6 @@ contract PassthroughVaultRequestRedeemTest is PassthroughVaultTest {
         (rangeStart, pending) = vault.redeemPosition(USER);
         assertEq(rangeStart, 0);
         assertEq(pending, firstShares + secondShares);
-    }
-
-    function testErrZeroAmountNotAllowed() public {
-        vm.prank(USER);
-        vm.expectRevert(IPassthroughVault.ZeroAmountNotAllowed.selector);
-        vault.requestRedeem(0, USER, USER);
     }
 
     function testErrInvalidOwner() public {
