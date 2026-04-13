@@ -172,6 +172,8 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
             abi.encode(0)
         );
 
+        vm.expectEmit(true, true, true, true);
+        emit IERC7540Redeem.RedeemRequest(USER, USER, 0, USER, SHARES);
         vm.prank(USER);
         uint256 requestId = vault.requestRedeem(SHARES, USER, USER);
 
@@ -201,8 +203,12 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
             abi.encode(0)
         );
 
+        vm.expectEmit(true, true, true, true);
+        emit IERC7540Redeem.RedeemRequest(USER, USER, 0, USER, SHARES);
         vm.prank(USER);
         vault.requestRedeem(SHARES, USER, USER);
+        vm.expectEmit(true, true, true, true);
+        emit IERC7540Redeem.RedeemRequest(USER2, USER2, 0, USER2, shares2);
         vm.prank(USER2);
         vault.requestRedeem(shares2, USER2, USER2);
 
@@ -229,6 +235,8 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
             abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(firstShares), address(vault), address(vault)),
             abi.encode(0)
         );
+        vm.expectEmit(true, true, true, true);
+        emit IERC7540Redeem.RedeemRequest(USER, USER, 0, USER, firstShares);
         vm.prank(USER);
         vault.requestRedeem(firstShares, USER, USER);
 
@@ -243,6 +251,8 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
             abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(secondShares), address(vault), address(vault)),
             abi.encode(0)
         );
+        vm.expectEmit(true, true, true, true);
+        emit IERC7540Redeem.RedeemRequest(USER, USER, 0, USER, secondShares);
         vm.prank(USER);
         vault.requestRedeem(secondShares, USER, USER);
 
@@ -314,6 +324,8 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
             abi.encodeWithSignature("redeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
             abi.encode(ASSETS)
         );
+        vm.expectEmit(true, true, true, true);
+        emit IERC7575.Withdraw(USER, RECEIVER, USER, ASSETS, SHARES);
 
         vm.prank(USER);
         uint256 assets = vault.redeem(SHARES, RECEIVER, USER);
@@ -326,6 +338,8 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
     function testRedeemMax() public {
         asset.mint(address(vault), ASSETS);
         vm.mockCall(underlying, abi.encodeWithSignature("redeem(uint256,address,address)"), abi.encode(ASSETS));
+        vm.expectEmit(true, true, true, true);
+        emit IERC7575.Withdraw(USER, RECEIVER, USER, ASSETS, SHARES);
 
         vm.prank(USER);
         uint256 assets = vault.redeem(type(uint256).max, RECEIVER, USER);
@@ -361,6 +375,8 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
             abi.encodeWithSignature("redeem(uint256,address,address)", uint256(partialShares), address(vault), address(vault)),
             abi.encode(partialAssets)
         );
+        vm.expectEmit(true, true, true, true);
+        emit IERC7575.Withdraw(USER, RECEIVER, USER, partialAssets, partialShares);
 
         vm.prank(USER);
         uint256 assets = vault.redeem(partialShares, RECEIVER, USER);
@@ -378,6 +394,8 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
             abi.encodeWithSignature("redeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
             abi.encode(ASSETS)
         );
+        vm.expectEmit(true, true, true, true);
+        emit IERC7575.Withdraw(USER, RECEIVER, USER, ASSETS, SHARES);
 
         vm.prank(USER);
         uint256 assets = vault.redeem(uint256(SHARES) * 2, RECEIVER, USER);
