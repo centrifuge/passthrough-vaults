@@ -108,8 +108,6 @@ contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
         uint128 shares_ = shares.toUint128();
         require(shares_ != 0, ZeroAmountNotAllowed());
 
-        SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
-
         // Force-claim any settled balance so the controller receives assets from previous
         // settlements before their position moves to the back of the queue.
         uint128 claimable = _claimableRedeemShares(controller);
@@ -127,6 +125,8 @@ contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
         pos.rangeStart = uint128(cumulativeRedeemRequested) - pos.pending;
         pos.pending += shares_;
         cumulativeRedeemRequested += shares_;
+
+        SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
 
         // This vault is both controller and owner in the underlying vault.
         vault.requestRedeem(shares_, address(this), address(this));
