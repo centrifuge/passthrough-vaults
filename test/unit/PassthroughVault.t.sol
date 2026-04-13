@@ -6,14 +6,14 @@ import {IERC165} from "protocol/misc/interfaces/IERC165.sol";
 import {IERC7575} from "protocol/misc/interfaces/IERC7575.sol";
 import {IERC7540Redeem, IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
-import {SyncDepositPassthroughVault} from "../../src/SyncDepositPassthroughVault.sol";
-import {ISyncDepositPassthroughVault} from "../../src/interfaces/IPassthroughVault.sol";
+import {PassthroughVault} from "../../src/PassthroughVault.sol";
+import {IPassthroughVault} from "../../src/interfaces/IPassthroughVault.sol";
 
 import "forge-std/Test.sol";
 
 contract IsContract {}
 
-contract SyncDepositPassthroughVaultTest is Test {
+contract PassthroughVaultTest is Test {
     uint128 constant ASSETS = 1000e6;
     uint128 constant SHARES = 1000e18;
 
@@ -26,12 +26,12 @@ contract SyncDepositPassthroughVaultTest is Test {
     address underlying = address(new IsContract());
     address memberlist = address(new IsContract());
 
-    SyncDepositPassthroughVault vault;
+    PassthroughVault vault;
 
     function setUp() public virtual {
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.share.selector), abi.encode(address(share)));
-        vault = new SyncDepositPassthroughVault(underlying, memberlist);
+        vault = new PassthroughVault(underlying, memberlist);
         _setupMocks();
     }
 
@@ -42,7 +42,7 @@ contract SyncDepositPassthroughVaultTest is Test {
     }
 }
 
-contract SyncDepositPassthroughVaultConstructorTest is SyncDepositPassthroughVaultTest {
+contract PassthroughVaultConstructorTest is PassthroughVaultTest {
     function testImmutables() public view {
         assertEq(vault.asset(), address(asset));
         assertEq(vault.share(), address(share));
@@ -57,7 +57,7 @@ contract SyncDepositPassthroughVaultConstructorTest is SyncDepositPassthroughVau
     function testNoWhitelistAllowsAll() public {
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.share.selector), abi.encode(address(share)));
-        SyncDepositPassthroughVault noWhitelistVault = new SyncDepositPassthroughVault(underlying, address(0));
+        PassthroughVault noWhitelistVault = new PassthroughVault(underlying, address(0));
 
         asset.mint(USER, ASSETS);
         vm.mockCall(underlying, abi.encodeWithSignature("deposit(uint256,address)"), abi.encode(ASSETS));
@@ -69,7 +69,7 @@ contract SyncDepositPassthroughVaultConstructorTest is SyncDepositPassthroughVau
     }
 }
 
-contract SyncDepositPassthroughVaultDepositTest is SyncDepositPassthroughVaultTest {
+contract PassthroughVaultDepositTest is PassthroughVaultTest {
     function testDeposit() public {
         uint256 sharesOut = ASSETS;
 
@@ -97,7 +97,7 @@ contract SyncDepositPassthroughVaultDepositTest is SyncDepositPassthroughVaultTe
 
     function testErrZeroAmountNotAllowed() public {
         vm.prank(USER);
-        vm.expectRevert(ISyncDepositPassthroughVault.ZeroAmountNotAllowed.selector);
+        vm.expectRevert(IPassthroughVault.ZeroAmountNotAllowed.selector);
         vault.deposit(0, RECEIVER);
     }
 
@@ -107,13 +107,13 @@ contract SyncDepositPassthroughVaultDepositTest is SyncDepositPassthroughVaultTe
         asset.mint(USER, ASSETS);
         vm.startPrank(USER);
         asset.approve(address(vault), ASSETS);
-        vm.expectRevert(ISyncDepositPassthroughVault.NotMember.selector);
+        vm.expectRevert(IPassthroughVault.NotMember.selector);
         vault.deposit(ASSETS, RECEIVER);
         vm.stopPrank();
     }
 }
 
-contract SyncDepositPassthroughVaultMintTest is SyncDepositPassthroughVaultTest {
+contract PassthroughVaultMintTest is PassthroughVaultTest {
     function testMint() public {
         uint128 shares = 100e18;
         uint256 previewAssets = 1000e6;
@@ -142,7 +142,7 @@ contract SyncDepositPassthroughVaultMintTest is SyncDepositPassthroughVaultTest 
 
     function testErrZeroAmountNotAllowed() public {
         vm.prank(USER);
-        vm.expectRevert(ISyncDepositPassthroughVault.ZeroAmountNotAllowed.selector);
+        vm.expectRevert(IPassthroughVault.ZeroAmountNotAllowed.selector);
         vault.mint(0, RECEIVER);
     }
 
@@ -151,13 +151,13 @@ contract SyncDepositPassthroughVaultMintTest is SyncDepositPassthroughVaultTest 
         vm.mockCall(underlying, abi.encodeWithSignature("previewMint(uint256)"), abi.encode(1000e6));
 
         vm.startPrank(USER);
-        vm.expectRevert(ISyncDepositPassthroughVault.NotMember.selector);
+        vm.expectRevert(IPassthroughVault.NotMember.selector);
         vault.mint(100e18, RECEIVER);
         vm.stopPrank();
     }
 }
 
-contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughVaultTest {
+contract PassthroughVaultRequestRedeemTest is PassthroughVaultTest {
     function testRequestRedeem() public {
         share.mint(USER, SHARES);
 
@@ -194,12 +194,16 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
 
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)
+            ),
             abi.encode(0)
         );
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(shares2), address(vault), address(vault)),
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(shares2), address(vault), address(vault)
+            ),
             abi.encode(0)
         );
 
@@ -232,7 +236,9 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
 
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(firstShares), address(vault), address(vault)),
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(firstShares), address(vault), address(vault)
+            ),
             abi.encode(0)
         );
         vm.expectEmit(true, true, true, true);
@@ -248,7 +254,9 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
 
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(secondShares), address(vault), address(vault)),
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(secondShares), address(vault), address(vault)
+            ),
             abi.encode(0)
         );
         vm.expectEmit(true, true, true, true);
@@ -265,13 +273,13 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
 
     function testErrZeroAmountNotAllowed() public {
         vm.prank(USER);
-        vm.expectRevert(ISyncDepositPassthroughVault.ZeroAmountNotAllowed.selector);
+        vm.expectRevert(IPassthroughVault.ZeroAmountNotAllowed.selector);
         vault.requestRedeem(0, USER, USER);
     }
 
     function testErrInvalidOwner() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(ISyncDepositPassthroughVault.InvalidOwner.selector);
+        vm.expectRevert(IPassthroughVault.InvalidOwner.selector);
         vault.requestRedeem(SHARES, USER, USER);
     }
 
@@ -286,13 +294,13 @@ contract SyncDepositPassthroughVaultRequestRedeemTest is SyncDepositPassthroughV
         share.mint(USER, SHARES);
         vm.startPrank(USER);
         share.approve(address(vault), SHARES);
-        vm.expectRevert(ISyncDepositPassthroughVault.NotMember.selector);
+        vm.expectRevert(IPassthroughVault.NotMember.selector);
         vault.requestRedeem(SHARES, USER, USER);
         vm.stopPrank();
     }
 }
 
-contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVaultTest {
+contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
     function setUp() public override {
         super.setUp();
 
@@ -354,7 +362,9 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
         share.approve(address(vault), SHARES);
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("requestRedeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)
+            ),
             abi.encode(0)
         );
         vm.prank(USER2);
@@ -372,7 +382,9 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
         asset.mint(address(vault), partialAssets);
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("redeem(uint256,address,address)", uint256(partialShares), address(vault), address(vault)),
+            abi.encodeWithSignature(
+                "redeem(uint256,address,address)", uint256(partialShares), address(vault), address(vault)
+            ),
             abi.encode(partialAssets)
         );
         vm.expectEmit(true, true, true, true);
@@ -409,7 +421,7 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.maxRedeem.selector, address(vault)), abi.encode(0));
 
         vm.prank(USER);
-        vm.expectRevert(ISyncDepositPassthroughVault.InsufficientClaimableShares.selector);
+        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
         vault.redeem(SHARES, RECEIVER, USER);
     }
 
@@ -432,7 +444,7 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
 
     function testErrWithdrawInvalidController() public {
         vm.prank(makeAddr("stranger"));
-        vm.expectRevert(ISyncDepositPassthroughVault.InvalidController.selector);
+        vm.expectRevert(IPassthroughVault.InvalidController.selector);
         vault.withdraw(ASSETS, RECEIVER, USER);
     }
 
@@ -440,12 +452,12 @@ contract SyncDepositPassthroughVaultRedeemClaimTest is SyncDepositPassthroughVau
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.maxRedeem.selector, address(vault)), abi.encode(0));
 
         vm.prank(USER);
-        vm.expectRevert(ISyncDepositPassthroughVault.InsufficientClaimableShares.selector);
+        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
         vault.withdraw(ASSETS, RECEIVER, USER);
     }
 }
 
-contract SyncDepositPassthroughVaultViewTest is SyncDepositPassthroughVaultTest {
+contract PassthroughVaultViewTest is PassthroughVaultTest {
     function testMaxDeposit() public {
         uint256 capacity = 1_000_000e6;
         vm.mockCall(

@@ -2,7 +2,12 @@
 pragma solidity 0.8.28;
 
 import {SyncDepositVault} from "protocol/vaults/SyncDepositVault.sol";
-import {ISyncDepositPassthroughVault, IPassthroughVaultFactory, IPassthroughRedeemVault, RedeemPosition} from "./interfaces/IPassthroughVault.sol";
+import {
+    IPassthroughVault,
+    IPassthroughVaultFactory,
+    IPassthroughRedeemVault,
+    RedeemPosition
+} from "./interfaces/IPassthroughVault.sol";
 
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
 import {IERC165} from "protocol/misc/interfaces/IERC165.sol";
@@ -10,7 +15,7 @@ import {IERC7575} from "protocol/misc/interfaces/IERC7575.sol";
 import {SafeTransferLib} from "protocol/misc/libraries/SafeTransferLib.sol";
 import {IERC7540Redeem, IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
-/// @title  SyncDepositPassthroughVault
+/// @title  PassthroughVault
 /// @notice Sync deposit + ERC-7540 async redeem pass-through vault.
 ///
 /// @dev    This contract acts as the single participant in the underlying vault. Investors
@@ -25,7 +30,7 @@ import {IERC7540Redeem, IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         remaining + new shares to the back of the queue.
 ///
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
-contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
+contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
 
     uint256 internal constant REQUEST_ID = 0;
@@ -307,19 +312,18 @@ contract SyncDepositPassthroughVault is ISyncDepositPassthroughVault {
     }
 }
 
-contract SyncDepositPassthroughVaultFactory is IPassthroughVaultFactory {
+contract PassthroughVaultFactory is IPassthroughVaultFactory {
     /// @inheritdoc IPassthroughVaultFactory
-    function newVault(address vault, address memberlist) external returns (ISyncDepositPassthroughVault) {
+    function newVault(address vault, address memberlist) external returns (IPassthroughVault) {
         bytes32 salt = keccak256(abi.encode(vault, memberlist));
-        return new SyncDepositPassthroughVault{salt: salt}(vault, memberlist);
+        return new PassthroughVault{salt: salt}(vault, memberlist);
     }
 
     /// @inheritdoc IPassthroughVaultFactory
     function getVaultAddress(address vault, address memberlist) external view returns (address) {
         bytes32 salt = keccak256(abi.encode(vault, memberlist));
-        bytes32 initcodeHash = keccak256(
-            abi.encodePacked(type(SyncDepositPassthroughVault).creationCode, abi.encode(vault, memberlist))
-        );
+        bytes32 initcodeHash =
+            keccak256(abi.encodePacked(type(PassthroughVault).creationCode, abi.encode(vault, memberlist)));
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, initcodeHash)))));
     }
 }

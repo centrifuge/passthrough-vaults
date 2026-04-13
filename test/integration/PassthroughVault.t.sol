@@ -6,9 +6,9 @@ import {ERC20} from "protocol/misc/ERC20.sol";
 import {BaseTest, VaultKind} from "protocol-test/core/spoke/integration/BaseTest.sol";
 
 import {SyncDepositVault} from "protocol/vaults/SyncDepositVault.sol";
-import {SyncDepositPassthroughVault} from "../../src/SyncDepositPassthroughVault.sol";
+import {PassthroughVault} from "../../src/PassthroughVault.sol";
 
-contract SyncDepositPassthroughVaultTest is BaseTest {
+contract PassthroughVaultTest is BaseTest {
     uint128 constant INITIAL_ASSET_BALANCE = 5_000e6;
 
     address immutable INVESTOR = makeAddr("INVESTOR");
@@ -18,17 +18,23 @@ contract SyncDepositPassthroughVaultTest is BaseTest {
     uint128 assetId;
     bytes16 scId;
     SyncDepositVault underlying;
-    SyncDepositPassthroughVault passthroughVault;
+    PassthroughVault passthroughVault;
 
     function setUp() public override {
         super.setUp();
         address vaultAddress;
         (poolId, vaultAddress, assetId) = deployVault(
-            VaultKind.SyncDepositAsyncRedeem, 6, address(freelyTransferableHook), defaultShareClassId, address(erc20), erc20TokenId, OTHER_CHAIN_ID
+            VaultKind.SyncDepositAsyncRedeem,
+            6,
+            address(freelyTransferableHook),
+            defaultShareClassId,
+            address(erc20),
+            erc20TokenId,
+            OTHER_CHAIN_ID
         );
         underlying = SyncDepositVault(vaultAddress);
         scId = underlying.scId().raw();
-        passthroughVault = new SyncDepositPassthroughVault(address(underlying), address(0));
+        passthroughVault = new PassthroughVault(address(underlying), address(0));
         centrifugeChain.updateMember(poolId, scId, address(passthroughVault), type(uint64).max);
 
         erc20.mint(INVESTOR, INITIAL_ASSET_BALANCE);

@@ -13,17 +13,14 @@ struct RedeemPosition {
 /// @title  IPassthroughRedeemVault
 /// @notice Subset of IERC7540Redeem without the operator extension. Used by the passthrough vault
 ///         which does not support per-investor operator delegation.
-interface IPassthroughRedeemVault {
+interface IAsyncRedeemVault {
     event RedeemRequest(
         address indexed controller, address indexed owner, uint256 indexed requestId, address sender, uint256 shares
     );
 
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
 
-    function pendingRedeemRequest(uint256 requestId, address controller)
-        external
-        view
-        returns (uint256 pendingShares);
+    function pendingRedeemRequest(uint256 requestId, address controller) external view returns (uint256 pendingShares);
 
     function claimableRedeemRequest(uint256 requestId, address controller)
         external
@@ -31,11 +28,11 @@ interface IPassthroughRedeemVault {
         returns (uint256 claimableShares);
 }
 
-/// @title  ISyncDepositPassthroughVault
+/// @title  IPassthroughVault
 /// @notice Sync deposit + ERC-7540 async redeem pass-through vault.
 /// @dev    The passthrough vault is the sole controller/owner in the underlying Centrifuge vault.
 ///         Investors hold the underlying share token directly and interact only with this contract.
-interface ISyncDepositPassthroughVault is IPassthroughRedeemVault, IERC7575, IERC7714 {
+interface IPassthroughVault is IAsyncRedeemVault, IERC7575, IERC7714 {
     error ZeroAmountNotAllowed();
     error InvalidOwner();
     error InvalidController();
@@ -66,7 +63,7 @@ interface ISyncDepositPassthroughVault is IPassthroughRedeemVault, IERC7575, IER
 /// @notice Factory for deploying passthrough vault contracts
 interface IPassthroughVaultFactory {
     /// @notice Deploys a new passthrough vault wrapping `vault`
-    function newVault(address vault, address memberlist) external returns (ISyncDepositPassthroughVault);
+    function newVault(address vault, address memberlist) external returns (IPassthroughVault);
 
     /// @notice Returns the deterministic address a vault would be deployed to without deploying it
     function getVaultAddress(address vault, address memberlist) external view returns (address);
