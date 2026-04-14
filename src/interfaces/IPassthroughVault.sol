@@ -37,11 +37,19 @@ interface IPassthroughVault is IAsyncRedeemVault, IERC7575, IERC7714 {
     error InvalidController();
     error NotMember();
     error InsufficientClaimableShares();
+    error PermissionlessClaimingNotAllowed();
 
     /// @notice Optional memberlist contract controlling which addresses may interact
     /// @dev Returns the zero address when no memberlist is configured (all addresses permitted)
     /// @return The memberlist contract, or address(0) if unrestricted
     function memberlist() external view returns (IERC7714);
+
+    /// @notice Whether anyone may call claimRedeemFor on behalf of a controller
+    function allowPermissionlessClaiming() external view returns (bool);
+
+    /// @notice Claims all claimable redeem assets for `controller` and forwards them to `controller`.
+    ///         Reverts if allowPermissionlessClaiming is false.
+    function claimRedeemFor(address controller) external returns (uint256 assets);
 
     /// @notice Cumulative shares ever redeemed from the underlying vault by this passthrough vault
     /// @return Total shares redeemed from the underlying vault across all time
@@ -62,8 +70,13 @@ interface IPassthroughVault is IAsyncRedeemVault, IERC7575, IERC7714 {
 /// @notice Factory for deploying passthrough vault contracts
 interface IPassthroughVaultFactory {
     /// @notice Deploys a new passthrough vault wrapping `vault`
-    function newVault(address vault, address memberlist) external returns (IPassthroughVault);
+    function newVault(address vault, address memberlist, bool allowPermissionlessClaiming)
+        external
+        returns (IPassthroughVault);
 
     /// @notice Returns the deterministic address a vault would be deployed to without deploying it
-    function getVaultAddress(address vault, address memberlist) external view returns (address);
+    function getVaultAddress(address vault, address memberlist, bool allowPermissionlessClaiming)
+        external
+        view
+        returns (address);
 }

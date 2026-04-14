@@ -42,6 +42,7 @@ contract PassthroughVault is IPassthroughVault {
     address public immutable share;
 
     IERC7714 public immutable memberlist;
+    bool public immutable allowPermissionlessClaiming;
 
     /// @notice Total shares ever claimed from the underlying vault.
     uint128 public totalRedeemed;
@@ -54,11 +55,12 @@ contract PassthroughVault is IPassthroughVault {
     // Constructor
     //----------------------------------------------------------------------------------------------
 
-    constructor(address vault_, address memberlist_) {
+    constructor(address vault_, address memberlist_, bool allowPermissionlessClaiming_) {
         vault = SyncDepositVault(vault_);
         asset = SyncDepositVault(vault_).asset();
         share = SyncDepositVault(vault_).share();
         memberlist = IERC7714(memberlist_);
+        allowPermissionlessClaiming = allowPermissionlessClaiming_;
 
         SafeTransferLib.safeApprove(asset, vault_, type(uint256).max);
     }
@@ -149,6 +151,14 @@ contract PassthroughVault is IPassthroughVault {
 
         uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
         assets = _redeem(actualShares.toUint128(), receiver, controller);
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function claimRedeemFor(address controller) external returns (uint256 assets) {
+        require(allowPermissionlessClaiming, PermissionlessClaimingNotAllowed());
+        uint128 claimable = _claimableRedeemShares(controller);
+        require(claimable > 0, InsufficientClaimableShares());
+        assets = _redeem(claimable, controller, controller);
     }
 
     //----------------------------------------------------------------------------------------------
@@ -317,16 +327,26 @@ contract PassthroughVault is IPassthroughVault {
 
 contract PassthroughVaultFactory is IPassthroughVaultFactory {
     /// @inheritdoc IPassthroughVaultFactory
-    function newVault(address vault, address memberlist) external returns (IPassthroughVault) {
-        bytes32 salt = keccak256(abi.encode(vault, memberlist));
-        return new PassthroughVault{salt: salt}(vault, memberlist);
+    function newVault(address vault, address memberlist, bool allowPermissionlessClaiming)
+        external
+        returns (IPassthroughVault)
+    {
+        bytes32 salt = keccak256(abi.encode(vault, memberlist, allowPermissionlessClaiming));
+        return new PassthroughVault{salt: salt}(vault, memberlist, allowPermissionlessClaiming);
     }
 
     /// @inheritdoc IPassthroughVaultFactory
-    function getVaultAddress(address vault, address memberlist) external view returns (address) {
-        bytes32 salt = keccak256(abi.encode(vault, memberlist));
-        bytes32 initcodeHash =
-            keccak256(abi.encodePacked(type(PassthroughVault).creationCode, abi.encode(vault, memberlist)));
+    function getVaultAddress(address vault, address memberlist, bool allowPermissionlessClaiming)
+        external
+        view
+        returns (address)
+    {
+        bytes32 salt = keccak256(abi.encode(vault, memberlist, allowPermissionlessClaiming));
+        bytes32 initcodeHash = keccak256(
+            abi.encodePacked(
+                type(PassthroughVault).creationCode, abi.encode(vault, memberlist, allowPermissionlessClaiming)
+            )
+        );
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, initcodeHash)))));
     }
 }

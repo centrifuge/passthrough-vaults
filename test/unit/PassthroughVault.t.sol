@@ -31,7 +31,7 @@ contract PassthroughVaultTest is Test {
     function setUp() public virtual {
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.share.selector), abi.encode(address(share)));
-        vault = new PassthroughVault(underlying, memberlist);
+        vault = new PassthroughVault(underlying, memberlist, false);
         _setupMocks();
     }
 
