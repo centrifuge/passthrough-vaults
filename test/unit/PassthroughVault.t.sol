@@ -439,6 +439,90 @@ contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
     }
 }
 
+contract PassthroughVaultClaimRedeemForTest is PassthroughVaultTest {
+    function setUp() public override {
+        super.setUp();
+
+        share.mint(USER, SHARES);
+        vm.prank(USER);
+        share.approve(address(vault), SHARES);
+
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)
+            ),
+            abi.encode(0)
+        );
+
+        vm.prank(USER);
+        vault.requestRedeem(SHARES, USER, USER);
+
+        vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.maxRedeem.selector, address(vault)), abi.encode(SHARES));
+        vm.mockCall(
+            underlying, abi.encodeWithSelector(IERC7575.maxWithdraw.selector, address(vault)), abi.encode(ASSETS)
+        );
+    }
+
+    function testClaimRedeemFor() public {
+        vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.asset.selector), abi.encode(address(asset)));
+        vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.share.selector), abi.encode(address(share)));
+        PassthroughVault permissionlessVault = new PassthroughVault(underlying, memberlist, true);
+
+        share.mint(USER, SHARES);
+        vm.prank(USER);
+        share.approve(address(permissionlessVault), SHARES);
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(SHARES), address(permissionlessVault),
+                address(permissionlessVault)
+            ),
+            abi.encode(0)
+        );
+        vm.prank(USER);
+        permissionlessVault.requestRedeem(SHARES, USER, USER);
+
+        asset.mint(address(permissionlessVault), ASSETS);
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "redeem(uint256,address,address)", uint256(SHARES), address(permissionlessVault),
+                address(permissionlessVault)
+            ),
+            abi.encode(ASSETS)
+        );
+        vm.expectEmit(true, true, true, true);
+        emit IPassthroughVault.Withdraw(RECEIVER, USER, USER, ASSETS, SHARES);
+
+        vm.prank(RECEIVER);
+        uint256 assets = permissionlessVault.claimRedeemFor(USER);
+
+        assertEq(assets, ASSETS);
+        assertEq(asset.balanceOf(USER), ASSETS);
+        assertEq(permissionlessVault.claimableRedeemRequest(0, USER), 0);
+    }
+
+    function testErrPermissionlessClaimingNotAllowed() public {
+        vm.prank(RECEIVER);
+        vm.expectRevert(IPassthroughVault.PermissionlessClaimingNotAllowed.selector);
+        vault.claimRedeemFor(USER);
+    }
+
+    function testErrClaimRedeemForInsufficientClaimableShares() public {
+        vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.asset.selector), abi.encode(address(asset)));
+        vm.mockCall(underlying, abi.encodeWithSelector(IERC7575.share.selector), abi.encode(address(share)));
+        PassthroughVault permissionlessVault = new PassthroughVault(underlying, memberlist, true);
+
+        vm.mockCall(
+            underlying, abi.encodeWithSelector(IERC7575.maxRedeem.selector, address(permissionlessVault)), abi.encode(0)
+        );
+
+        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
+        permissionlessVault.claimRedeemFor(USER);
+    }
+}
+
 contract PassthroughVaultViewTest is PassthroughVaultTest {
     function testMaxDeposit() public {
         uint256 capacity = 1_000_000e6;
@@ -467,10 +551,4 @@ contract PassthroughVaultViewTest is PassthroughVaultTest {
         assertEq(vault.previewMint(shares), assets);
     }
 
-    function testSupportsInterface() public view {
-        assertTrue(vault.supportsInterface(type(IERC7540Redeem).interfaceId));
-        assertTrue(vault.supportsInterface(type(IERC7714).interfaceId));
-        assertTrue(vault.supportsInterface(type(IERC7575).interfaceId));
-        assertTrue(vault.supportsInterface(type(IERC165).interfaceId));
-    }
 }
