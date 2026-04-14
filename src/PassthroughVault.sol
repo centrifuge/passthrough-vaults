@@ -2,19 +2,12 @@
 pragma solidity 0.8.28;
 
 import {SyncDepositVault} from "protocol/vaults/SyncDepositVault.sol";
-import {
-    IPassthroughVault,
-    IPassthroughVaultFactory,
-    IAsyncRedeemVault,
-    RedeemPosition
-} from "./interfaces/IPassthroughVault.sol";
+import {IPassthroughVault, IPassthroughVaultFactory, RedeemPosition} from "./interfaces/IPassthroughVault.sol";
 
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
-import {IERC165} from "protocol/misc/interfaces/IERC165.sol";
-import {IERC7575} from "protocol/misc/interfaces/IERC7575.sol";
 import {IERC20} from "protocol/misc/interfaces/IERC20.sol";
 import {SafeTransferLib} from "protocol/misc/libraries/SafeTransferLib.sol";
-import {IERC7540Redeem, IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
+import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
 /// @title  PassthroughVault
 /// @notice Sync deposit + ERC-7540 async redeem pass-through vault.
@@ -36,9 +29,9 @@ contract PassthroughVault is IPassthroughVault {
 
     SyncDepositVault public immutable vault;
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     address public immutable asset;
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     address public immutable share;
 
     IERC7714 public immutable memberlist;
@@ -69,7 +62,7 @@ contract PassthroughVault is IPassthroughVault {
     // Sync deposit
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function deposit(uint256 assets, address receiver) external permissioned(msg.sender) returns (uint256 shares) {
         uint128 assets_ = assets.toUint128();
 
@@ -82,7 +75,7 @@ contract PassthroughVault is IPassthroughVault {
         emit Deposit(msg.sender, receiver, assets_, shares);
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
         uint128 shares_ = shares.toUint128();
 
@@ -100,7 +93,7 @@ contract PassthroughVault is IPassthroughVault {
     // Async redeem
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IAsyncRedeemVault
+    /// @inheritdoc IPassthroughVault
     function requestRedeem(uint256 shares, address controller, address owner)
         external
         permissioned(controller)
@@ -126,7 +119,7 @@ contract PassthroughVault is IPassthroughVault {
         return requestId;
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares) {
         require(controller == msg.sender, InvalidController());
 
@@ -142,7 +135,7 @@ contract PassthroughVault is IPassthroughVault {
         _redeem(shares.toUint128(), receiver, controller);
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
         require(controller == msg.sender, InvalidController());
 
@@ -165,22 +158,22 @@ contract PassthroughVault is IPassthroughVault {
     // ERC-4626 / ERC-7575 deposit views
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function maxDeposit(address) external view returns (uint256) {
         return vault.maxDeposit(address(this));
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function maxMint(address) external view returns (uint256) {
         return vault.maxMint(address(this));
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function previewDeposit(uint256 assets) external view returns (uint256) {
         return vault.previewDeposit(assets);
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function previewMint(uint256 shares) external view returns (uint256) {
         return vault.previewMint(shares);
     }
@@ -189,12 +182,12 @@ contract PassthroughVault is IPassthroughVault {
     // ERC-7540 redeem views
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IAsyncRedeemVault
+    /// @inheritdoc IPassthroughVault
     function pendingRedeemRequest(uint256, address controller) external view returns (uint256) {
         return redeemPosition[controller].pending - _claimableRedeemShares(controller);
     }
 
-    /// @inheritdoc IAsyncRedeemVault
+    /// @inheritdoc IPassthroughVault
     function claimableRedeemRequest(uint256, address controller) external view returns (uint256) {
         return _claimableRedeemShares(controller);
     }
@@ -203,53 +196,31 @@ contract PassthroughVault is IPassthroughVault {
     // ERC-4626 / ERC-7575 redeem views
     //----------------------------------------------------------------------------------------------
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function totalAssets() external view returns (uint256) {
         return vault.convertToAssets(IERC20(share).totalSupply());
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function convertToShares(uint256 assets) external view returns (uint256) {
         return vault.convertToShares(assets);
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function convertToAssets(uint256 shares_) external view returns (uint256) {
         return vault.convertToAssets(shares_);
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function maxWithdraw(address controller) external view returns (uint256) {
         uint256 claimable = _claimableRedeemShares(controller);
         if (claimable == 0) return 0;
         return _sharesToAssets(claimable, MathLib.Rounding.Down);
     }
 
-    /// @inheritdoc IERC7575
+    /// @inheritdoc IPassthroughVault
     function maxRedeem(address controller) external view returns (uint256) {
         return _claimableRedeemShares(controller);
-    }
-
-    /// @inheritdoc IERC7575
-    /// @dev ERC-7540: async redeem preview always reverts
-    function previewWithdraw(uint256) external pure returns (uint256) {
-        revert();
-    }
-
-    /// @inheritdoc IERC7575
-    /// @dev ERC-7540: async redeem preview always reverts
-    function previewRedeem(uint256) external pure returns (uint256) {
-        revert();
-    }
-
-    //----------------------------------------------------------------------------------------------
-    // ERC-165
-    //----------------------------------------------------------------------------------------------
-
-    /// @inheritdoc IERC165
-    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
-        return interfaceId == type(IERC7540Redeem).interfaceId || interfaceId == type(IERC7714).interfaceId
-            || interfaceId == type(IERC7575).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 
     //----------------------------------------------------------------------------------------------
