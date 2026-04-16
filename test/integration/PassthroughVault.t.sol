@@ -34,7 +34,7 @@ contract PassthroughVaultTest is BaseTest {
         );
         underlying = SyncDepositVault(vaultAddress);
         scId = underlying.scId().raw();
-        passthroughVault = new PassthroughVault(address(underlying), address(0));
+        passthroughVault = new PassthroughVault(address(underlying), address(0), false);
         centrifugeChain.updateMember(poolId, scId, address(passthroughVault), type(uint64).max);
 
         erc20.mint(INVESTOR, INITIAL_ASSET_BALANCE);
