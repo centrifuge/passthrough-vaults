@@ -103,6 +103,8 @@ contract PassthroughVault is IPassthroughVault {
 
         uint128 shares_ = shares.toUint128();
 
+        SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
+
         // Force-claim any settled balance so the controller receives assets from previous
         // settlements before their position moves to the back of the queue.
         uint128 claimable = _claimableRedeemShares(controller);
@@ -110,7 +112,6 @@ contract PassthroughVault is IPassthroughVault {
 
         _enqueueRedeem(controller, shares_);
 
-        SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
 
         // This vault is both controller and owner in the underlying vault.
         uint256 requestId = vault.requestRedeem(shares_, address(this), address(this));
@@ -198,7 +199,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function totalAssets() external view returns (uint256) {
-        return vault.convertToAssets(IERC20(share).totalSupply());
+        return vault.totalAssets();
     }
 
     /// @inheritdoc IPassthroughVault
