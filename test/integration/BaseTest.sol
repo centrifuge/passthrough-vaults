@@ -13,13 +13,14 @@ import {IHubRequestManager} from "protocol/core/hub/interfaces/IHubRequestManage
 import {ISyncManager} from "protocol/vaults/interfaces/IVaultManagers.sol";
 import {UpdateRestrictionMessageLib} from "protocol/hooks/libraries/UpdateRestrictionMessageLib.sol";
 import {SyncDepositVault} from "protocol/vaults/SyncDepositVault.sol";
+import {AsyncVault} from "protocol/vaults/AsyncVault.sol";
 import {BatchRequestManager} from "protocol/vaults/BatchRequestManager.sol";
 
 import {PassthroughVault} from "../../src/PassthroughVault.sol";
 
 /// @notice Base contract for PassthroughVault integration tests.
 ///         Extends CentrifugeIntegrationTestWithUtils and provides helpers to deploy a
-///         SyncDepositVault and a PassthroughVault using real Hub↔Spoke messaging.
+///         SyncDepositVault or AsyncVault and a PassthroughVault using real Hub↔Spoke messaging.
 contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
     using CastLib for *;
     using UpdateRestrictionMessageLib for *;
@@ -35,7 +36,7 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
         vm.deal(FM, 10 ether);
     }
 
-    function _deploySyncDepositVault() internal returns (SyncDepositVault vault, uint128 assetId) {
+    function _deployCommonPoolSetup() internal returns (uint128 assetId) {
         _createPool();
 
         vm.startPrank(FM);
@@ -67,13 +68,22 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
         hub.updateBalanceSheetManager{value: GAS}(
             POOL_A, LOCAL_CENTRIFUGE_ID, address(asyncRequestManager).toBytes32(), true, FM
         );
-        hub.updateBalanceSheetManager{value: GAS}(
-            POOL_A, LOCAL_CENTRIFUGE_ID, address(syncManager).toBytes32(), true, FM
-        );
 
         hub.updateSharePrice(POOL_A, SC_1, d18(1e18), uint64(block.timestamp));
         hub.notifySharePrice{value: GAS}(POOL_A, SC_1, LOCAL_CENTRIFUGE_ID, FM);
         hub.notifyAssetPrice{value: GAS}(POOL_A, SC_1, usdcId, FM);
+
+        vm.stopPrank();
+    }
+
+    function _deploySyncDepositVault() internal returns (SyncDepositVault vault, uint128 assetId) {
+        assetId = _deployCommonPoolSetup();
+
+        vm.startPrank(FM);
+
+        hub.updateBalanceSheetManager{value: GAS}(
+            POOL_A, LOCAL_CENTRIFUGE_ID, address(syncManager).toBytes32(), true, FM
+        );
 
         hub.updateVault{value: GAS}(
             POOL_A,
@@ -99,11 +109,30 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
         vault = SyncDepositVault(address(vaultRegistry.vault(POOL_A, SC_1, usdcId, asyncRequestManager)));
     }
 
-    function _deployPassthroughVault(SyncDepositVault underlying, bool allowPermissionlessClaiming)
+    function _deployAsyncDepositVault() internal returns (AsyncVault vault, uint128 assetId) {
+        assetId = _deployCommonPoolSetup();
+
+        vm.startPrank(FM);
+
+        hub.updateVault{value: GAS}(
+            POOL_A,
+            SC_1,
+            usdcId,
+            address(asyncVaultFactory).toBytes32(),
+            VaultUpdateKind.DeployAndLink,
+            EXTRA_GAS,
+            FM
+        );
+        vm.stopPrank();
+
+        vault = AsyncVault(address(vaultRegistry.vault(POOL_A, SC_1, usdcId, asyncRequestManager)));
+    }
+
+    function _deployPassthroughVault(address underlying, bool allowPermissionlessClaiming)
         internal
         returns (PassthroughVault pv)
     {
-        pv = new PassthroughVault(address(underlying), address(0), allowPermissionlessClaiming);
+        pv = new PassthroughVault(underlying, address(0), allowPermissionlessClaiming);
 
         vm.prank(FM);
         hub.updateRestriction{value: GAS}(
@@ -116,6 +145,25 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
             EXTRA_GAS,
             FM
         );
+    }
+
+    function _settleDeposit(PassthroughVault pv, uint128 assets) internal {
+        vm.startPrank(FM);
+
+        uint32 depositEpochId = batchRequestManager.nowDepositEpoch(POOL_A, SC_1, usdcId);
+        D18 pricePoolPerAsset_ = hub.pricePoolPerAsset(POOL_A, SC_1, usdcId);
+        batchRequestManager.approveDeposits{value: GAS}(POOL_A, SC_1, usdcId, depositEpochId, assets, pricePoolPerAsset_, FM);
+
+        uint32 issueEpochId = batchRequestManager.nowIssueEpoch(POOL_A, SC_1, usdcId);
+        (D18 sharePrice,) = shareClassManager.pricePoolPerShare(POOL_A, SC_1);
+        batchRequestManager.issueShares{value: GAS}(POOL_A, SC_1, usdcId, issueEpochId, sharePrice, HOOK_GAS, FM);
+
+        bytes32 investor = address(pv).toBytes32();
+        batchRequestManager.notifyDeposit{value: GAS}(
+            POOL_A, SC_1, usdcId, investor, batchRequestManager.maxDepositClaims(POOL_A, SC_1, investor, usdcId), FM
+        );
+
+        vm.stopPrank();
     }
 
     function _settleRedeem(PassthroughVault pv, uint128 shares) internal {

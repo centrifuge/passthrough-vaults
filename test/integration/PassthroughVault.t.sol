@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {ERC20} from "protocol/misc/ERC20.sol";
 import {SyncDepositVault} from "protocol/vaults/SyncDepositVault.sol";
+import {AsyncVault} from "protocol/vaults/AsyncVault.sol";
 
 import {PassthroughVault} from "../../src/PassthroughVault.sol";
 import {IntegrationBaseTest} from "./BaseTest.sol";
@@ -24,7 +25,7 @@ contract PassthroughVaultTest is IntegrationBaseTest {
         super.setUp();
 
         (underlying, assetId) = _deploySyncDepositVault();
-        passthroughVault = _deployPassthroughVault(underlying, false);
+        passthroughVault = _deployPassthroughVault(address(underlying), false);
 
         _mintUSDC(INVESTOR, INITIAL_BALANCE);
         _mintUSDC(INVESTOR2, INITIAL_BALANCE);
@@ -143,5 +144,69 @@ contract PassthroughVaultTest is IntegrationBaseTest {
         // Final settlement: everything fully claimable for both investors
         assertEq(passthroughVault.maxRedeem(INVESTOR), 1000e18);
         assertEq(passthroughVault.maxRedeem(INVESTOR2), 1000e18);
+    }
+}
+
+contract PassthroughVaultAsyncDepositTest is IntegrationBaseTest {
+    uint128 constant INITIAL_BALANCE = 5_000e6;
+    uint256 constant SHARE_SCALE = 1e12;
+
+    address immutable INVESTOR = makeAddr("INVESTOR");
+
+    AsyncVault underlying;
+    PassthroughVault passthroughVault;
+    uint128 assetId;
+
+    function setUp() public override {
+        super.setUp();
+
+        (underlying, assetId) = _deployAsyncDepositVault();
+        passthroughVault = _deployPassthroughVault(address(underlying), false);
+
+        _mintUSDC(INVESTOR, INITIAL_BALANCE);
+
+        vm.startPrank(INVESTOR);
+        usdc.approve(address(passthroughVault), type(uint256).max);
+        ERC20(underlying.share()).approve(address(passthroughVault), type(uint256).max);
+        vm.stopPrank();
+    }
+
+    function testFullFlow() public {
+        uint256 depositAmount = 1000e6;
+        uint256 expectedShares = depositAmount * SHARE_SCALE;
+
+        vm.prank(INVESTOR);
+        uint256 requestId = passthroughVault.requestDeposit(depositAmount, INVESTOR, INVESTOR);
+
+        assertEq(requestId, 0);
+        assertEq(usdc.balanceOf(INVESTOR), INITIAL_BALANCE - depositAmount);
+        assertEq(passthroughVault.pendingDepositRequest(0, INVESTOR), depositAmount);
+        assertEq(passthroughVault.claimableDepositRequest(0, INVESTOR), 0);
+
+        _settleDeposit(passthroughVault, uint128(depositAmount));
+
+        assertEq(passthroughVault.pendingDepositRequest(0, INVESTOR), 0);
+        assertGe(passthroughVault.claimableDepositRequest(0, INVESTOR), depositAmount - 1); // rounding
+
+        vm.prank(INVESTOR);
+        uint256 sharesMinted = passthroughVault.deposit(depositAmount, INVESTOR, INVESTOR);
+
+        assertEq(sharesMinted, expectedShares);
+        assertEq(ERC20(underlying.share()).balanceOf(INVESTOR), expectedShares);
+        assertEq(passthroughVault.claimableDepositRequest(0, INVESTOR), 0);
+
+        vm.prank(INVESTOR);
+        passthroughVault.requestRedeem(expectedShares, INVESTOR, INVESTOR);
+
+        assertEq(ERC20(underlying.share()).balanceOf(INVESTOR), 0);
+        assertEq(passthroughVault.pendingRedeemRequest(0, INVESTOR), expectedShares);
+
+        _settleRedeem(passthroughVault, uint128(expectedShares));
+
+        vm.prank(INVESTOR);
+        uint256 assetsReceived = passthroughVault.redeem(expectedShares, INVESTOR, INVESTOR);
+
+        assertEq(assetsReceived, depositAmount);
+        assertEq(usdc.balanceOf(INVESTOR), INITIAL_BALANCE);
     }
 }
