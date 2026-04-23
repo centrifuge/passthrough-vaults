@@ -130,7 +130,8 @@ contract PassthroughVault is IPassthroughVault {
 
         uint256 actualAssets = shares == type(uint256).max
             ? claimable
-            : MathLib.min(_depositSharesToAssets(shares, MathLib.Rounding.Up), uint256(claimable));
+            // deposit shares → assets
+            : MathLib.min(_scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up), uint256(claimable));
 
         _claimDeposit(actualAssets.toUint128(), receiver, controller);
         assets = actualAssets;
@@ -197,7 +198,8 @@ contract PassthroughVault is IPassthroughVault {
         // For type(uint256).max, claim all claimable shares directly.
         shares = assets == type(uint256).max
             ? claimable
-            : MathLib.min(_redeemAssetsToShares(assets, MathLib.Rounding.Up), claimable);
+            // redeem assets → shares
+            : MathLib.min(_scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up), claimable);
         require(shares > 0, InsufficientClaimableShares());
 
         _redeem(shares.toUint128(), receiver, controller);
@@ -233,7 +235,8 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxMint(address controller) external view returns (uint256) {
-        return _depositAssetsToShares(_claimableDepositAssets(controller), MathLib.Rounding.Down);
+        // deposit assets → shares
+        return _scale(_claimableDepositAssets(controller), vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
     }
 
     /// @inheritdoc IPassthroughVault
@@ -283,7 +286,8 @@ contract PassthroughVault is IPassthroughVault {
     function maxWithdraw(address controller) external view returns (uint256) {
         uint256 claimable = _claimableRedeemShares(controller);
         if (claimable == 0) return 0;
-        return _redeemSharesToAssets(claimable, MathLib.Rounding.Down);
+        // redeem shares → assets
+        return _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
     }
 
     /// @inheritdoc IPassthroughVault
@@ -351,18 +355,6 @@ contract PassthroughVault is IPassthroughVault {
         emit Deposit(msg.sender, receiver, assets, sharesOut);
     }
 
-    function _depositSharesToAssets(uint256 shares, MathLib.Rounding rounding) internal view returns (uint256) {
-        uint256 settledShares = vault.maxMint(address(this));
-        if (settledShares == 0) return 0;
-        return shares.mulDiv(vault.maxDeposit(address(this)), settledShares, rounding);
-    }
-
-    function _depositAssetsToShares(uint256 assets, MathLib.Rounding rounding) internal view returns (uint256) {
-        uint256 settledAssets = vault.maxDeposit(address(this));
-        if (settledAssets == 0) return 0;
-        return assets.mulDiv(vault.maxMint(address(this)), settledAssets, rounding);
-    }
-
     function _getCumulativeSettled() internal view returns (uint128) {
         return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
     }
@@ -404,16 +396,9 @@ contract PassthroughVault is IPassthroughVault {
         emit Withdraw(msg.sender, receiver, controller, assets, shares);
     }
 
-    function _redeemSharesToAssets(uint256 shares, MathLib.Rounding rounding) internal view returns (uint256) {
-        uint256 settledShares = vault.maxRedeem(address(this));
-        if (settledShares == 0) return 0;
-        return shares.mulDiv(vault.maxWithdraw(address(this)), settledShares, rounding);
-    }
-
-    function _redeemAssetsToShares(uint256 assets, MathLib.Rounding rounding) internal view returns (uint256) {
-        uint256 settledAssets = vault.maxWithdraw(address(this));
-        if (settledAssets == 0) return 0;
-        return assets.mulDiv(vault.maxRedeem(address(this)), settledAssets, rounding);
+    function _scale(uint256 amount, uint256 num, uint256 denom, MathLib.Rounding rounding) private pure returns (uint256) {
+        if (denom == 0) return 0;
+        return amount.mulDiv(num, denom, rounding);
     }
 }
 

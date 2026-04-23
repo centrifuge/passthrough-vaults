@@ -37,8 +37,10 @@ contract PassthroughVaultTest is Test {
     function _setupMocks() internal virtual {
         vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector), abi.encode(true));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector), abi.encode(0));
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxWithdraw.selector), abi.encode(0));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.pendingRedeemRequest.selector), abi.encode(0));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxDeposit.selector), abi.encode(0));
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxMint.selector), abi.encode(0));
     }
 }
 
