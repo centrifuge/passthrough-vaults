@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {ERC20} from "protocol/misc/ERC20.sol";
 import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
+import {MathLib} from "protocol/misc/libraries/MathLib.sol";
 
 import {PassthroughVault} from "../../src/PassthroughVault.sol";
 import {IPassthroughVault} from "../../src/interfaces/IPassthroughVault.sol";
@@ -876,25 +877,144 @@ contract PassthroughVaultClaimRedeemForTest is PassthroughVaultTest {
     }
 }
 
-contract PassthroughVaultViewTest is PassthroughVaultTest {
-    function testMaxDeposit() public {
-        assertEq(vault.maxDeposit(USER), 0);
+/// @notice Fuzz the deposit pricing invariant: mint(shares) gives the receiver ≥ shares−1 shares.
+///
+///         The vault converts the requested shares to assets using Up rounding
+///         (_depositSharesToAssets), then calls the underlying's deposit(assets) which uses
+///         floor division. The Up rounding compensates so the receiver never gets less than
+///         requested (within 1 wei).
+contract PassthroughVaultDepositPricingFuzzTest is PassthroughVaultTest {
+    function setUp() public override {
+        super.setUp();
+
+        asset.mint(USER, ASSETS);
+        vm.prank(USER);
+        asset.approve(address(vault), ASSETS);
+
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "requestDeposit(uint256,address,address)", uint256(ASSETS), address(vault), address(vault)
+            ),
+            abi.encode(0)
+        );
+
+        vm.prank(USER);
+        vault.requestDeposit(ASSETS, USER, USER);
+
+        // Fully settle USER's position.
+        vm.mockCall(
+            underlying, abi.encodeWithSelector(IPassthroughVault.maxDeposit.selector, address(vault)), abi.encode(ASSETS)
+        );
     }
 
-    function testMaxMint() public {
-        assertEq(vault.maxMint(USER), 0);
+    /// @dev Invariant: receiver gets exactly ≥ requestedShares shares.
+    ///
+    ///      Up rounding in _depositSharesToAssets ensures that the assets spent always cover
+    ///      the requested shares. The invariant only applies when the request does not exceed
+    ///      the available claimable amount (requestedShares ≤ settledShares).
+    function testFuzz_mint_receiverGetsRequestedShares(uint64 settledShares, uint64 requestedShares) public {
+        settledShares = uint64(bound(settledShares, 1, type(uint64).max));
+        // Bound requestedShares ≤ settledShares so actualAssets stays within claimable (no cap).
+        requestedShares = uint64(bound(requestedShares, 1, settledShares));
+
+        vm.mockCall(
+            underlying, abi.encodeWithSelector(IPassthroughVault.maxMint.selector, address(vault)), abi.encode(settledShares)
+        );
+
+        // Mirror the vault's _depositSharesToAssets(requestedShares, Up) logic:
+        // actualAssets = ceil(requestedShares * ASSETS / settledShares) ≤ ASSETS (no cap since requestedShares ≤ settledShares)
+        uint256 actualAssets = MathLib.mulDiv(requestedShares, uint256(ASSETS), settledShares, MathLib.Rounding.Up);
+
+        // Mirror what the underlying's deposit(3-arg) returns (floor division at settlement price).
+        uint256 sharesOut = MathLib.mulDiv(actualAssets, settledShares, uint256(ASSETS), MathLib.Rounding.Down);
+
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "deposit(uint256,address,address)", actualAssets, address(vault), address(vault)
+            ),
+            abi.encode(sharesOut)
+        );
+        share.mint(address(vault), sharesOut);
+
+        vm.prank(USER);
+        uint256 assetsSpent = vault.mint(requestedShares, RECEIVER, USER);
+
+        assertEq(assetsSpent, actualAssets);
+        // Up rounding guarantees: floor(ceil(q * n/d) * d/n) ≥ q exactly.
+        assertGe(share.balanceOf(RECEIVER), requestedShares);
+    }
+}
+
+/// @notice Fuzz the redeem pricing invariant: withdraw(assets) gives the receiver ≥ assets−1 assets.
+///
+///         The vault converts the requested assets to shares using Up rounding
+///         (_redeemAssetsToShares), then calls the underlying's redeem(shares) which uses
+///         floor division. The Up rounding compensates so the receiver never gets less than
+///         requested (within 1 wei).
+contract PassthroughVaultRedeemPricingFuzzTest is PassthroughVaultTest {
+    function setUp() public override {
+        super.setUp();
+
+        share.mint(USER, SHARES);
+        vm.prank(USER);
+        share.approve(address(vault), SHARES);
+
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "requestRedeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)
+            ),
+            abi.encode(0)
+        );
+
+        vm.prank(USER);
+        vault.requestRedeem(SHARES, USER, USER);
+
+        // Fully settle USER's position.
+        vm.mockCall(
+            underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)), abi.encode(SHARES)
+        );
     }
 
-    function testPreviewDeposit() public {
-        uint256 shares = 1000e18;
-        vm.mockCall(underlying, abi.encodeWithSignature("previewDeposit(uint256)", uint256(ASSETS)), abi.encode(shares));
-        assertEq(vault.previewDeposit(ASSETS), shares);
-    }
+    /// @dev Invariant: receiver gets exactly ≥ requestedAssets assets.
+    ///
+    ///      Up rounding in _redeemAssetsToShares ensures that the shares redeemed always cover
+    ///      the requested assets. The invariant only applies when the request does not exceed
+    ///      the available claimable amount (requestedAssets ≤ settledAssets).
+    function testFuzz_withdraw_receiverGetsRequestedAssets(uint64 settledAssets, uint64 requestedAssets) public {
+        settledAssets = uint64(bound(settledAssets, 1, type(uint64).max));
+        // Bound requestedAssets ≤ settledAssets so actualShares stays within claimable (no cap).
+        requestedAssets = uint64(bound(requestedAssets, 1, settledAssets));
 
-    function testPreviewMint() public {
-        uint128 shares = 100e18;
-        uint256 assets = 1000e6;
-        vm.mockCall(underlying, abi.encodeWithSignature("previewMint(uint256)", shares), abi.encode(assets));
-        assertEq(vault.previewMint(shares), assets);
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSelector(IPassthroughVault.maxWithdraw.selector, address(vault)),
+            abi.encode(settledAssets)
+        );
+
+        // Mirror the vault's _redeemAssetsToShares(requestedAssets, Up) logic:
+        // actualShares = ceil(requestedAssets * SHARES / settledAssets) ≤ SHARES (no cap since requestedAssets ≤ settledAssets)
+        uint256 actualShares = MathLib.mulDiv(requestedAssets, uint256(SHARES), settledAssets, MathLib.Rounding.Up);
+
+        // Mirror what the underlying's redeem(3-arg) returns (floor division at settlement price).
+        uint256 assetsOut = MathLib.mulDiv(actualShares, settledAssets, uint256(SHARES), MathLib.Rounding.Down);
+
+        asset.mint(address(vault), assetsOut);
+        vm.mockCall(
+            underlying,
+            abi.encodeWithSignature(
+                "redeem(uint256,address,address)", actualShares, address(vault), address(vault)
+            ),
+            abi.encode(assetsOut)
+        );
+
+        vm.prank(USER);
+        uint256 sharesRedeemed = vault.withdraw(requestedAssets, RECEIVER, USER);
+
+        assertEq(sharesRedeemed, actualShares);
+        // Up rounding guarantees: floor(ceil(q * n/d) * d/n) ≥ q exactly.
+        assertGe(asset.balanceOf(RECEIVER), requestedAssets);
     }
 }

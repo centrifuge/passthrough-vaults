@@ -18,9 +18,6 @@ import {BatchRequestManager} from "protocol/vaults/BatchRequestManager.sol";
 
 import {PassthroughVault} from "../../src/PassthroughVault.sol";
 
-/// @notice Base contract for PassthroughVault integration tests.
-///         Extends CentrifugeIntegrationTestWithUtils and provides helpers to deploy a
-///         SyncDepositVault or AsyncVault and a PassthroughVault using real Hub↔Spoke messaging.
 contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
     using CastLib for *;
     using UpdateRestrictionMessageLib for *;
