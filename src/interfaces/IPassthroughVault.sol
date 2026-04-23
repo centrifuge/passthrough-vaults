@@ -3,16 +3,12 @@ pragma solidity >=0.5.0;
 
 import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
-/// @notice Tracks an investor's position in the global FIFO deposit queue
-struct DepositPosition {
-    uint128 rangeStart; /// global queue index (in assets) at which this investor's segment begins
-    uint128 pending; /// assets currently in this investor's queue segment
-}
-
-/// @notice Tracks an investor's position in the global FIFO redeem queue
-struct RedeemPosition {
-    uint128 rangeStart; /// global queue index at which this investor's segment begins
-    uint128 pending; /// shares currently in this investor's queue segment
+/// @notice Combined deposit and redeem FIFO queue state for a single investor
+struct Position {
+    uint128 depositRangeStart; /// global deposit queue index (in assets) at which this investor's segment begins
+    uint128 depositPending; /// assets currently in this investor's deposit queue segment
+    uint128 redeemRangeStart; /// global redeem queue index (in shares) at which this investor's segment begins
+    uint128 redeemPending; /// shares currently in this investor's redeem queue segment
 }
 
 /// @title  IPassthroughVault
@@ -120,17 +116,22 @@ interface IPassthroughVault is IERC7714 {
     /// @notice Cumulative assets ever enqueued for async deposit
     function cumulativeDepositRequested() external view returns (uint128);
 
-    /// @notice Returns the FIFO deposit queue position for a given investor
-    function depositPosition(address controller) external view returns (uint128 rangeStart, uint128 pending);
-
     /// @notice Cumulative shares ever redeemed from the underlying vault by this passthrough vault
     function totalRedeemClaimed() external view returns (uint128);
 
     /// @notice Cumulative shares ever submitted for redemption by investors through this vault
     function cumulativeRedeemRequested() external view returns (uint128);
 
-    /// @notice Returns the FIFO redeem queue position for a given investor
-    function redeemPosition(address controller) external view returns (uint128 rangeStart, uint128 pending);
+    /// @notice Returns the combined deposit and redeem queue position for a given investor
+    function position(address controller)
+        external
+        view
+        returns (
+            uint128 depositRangeStart,
+            uint128 depositPending,
+            uint128 redeemRangeStart,
+            uint128 redeemPending
+        );
 }
 
 /// @title  IPassthroughVaultFactory

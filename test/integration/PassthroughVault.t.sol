@@ -112,7 +112,7 @@ contract PassthroughVaultTest is IntegrationBaseTest {
 
         // Investor A's position should be re-queued to [oldCumulative - oldPending, oldCumulative + newlyRequested]
         // = [1500e18, 2500e18]
-        (uint128 rangeStart, uint128 pending) = passthroughVault.redeemPosition(INVESTOR);
+        (,, uint128 rangeStart, uint128 pending) = passthroughVault.position(INVESTOR);
         assertEq(rangeStart, 1500e18);
         assertEq(pending, 1000e18);
 
