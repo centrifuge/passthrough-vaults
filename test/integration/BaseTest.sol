@@ -112,13 +112,7 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
         vm.startPrank(FM);
 
         hub.updateVault{value: GAS}(
-            POOL_A,
-            SC_1,
-            usdcId,
-            address(asyncVaultFactory).toBytes32(),
-            VaultUpdateKind.DeployAndLink,
-            EXTRA_GAS,
-            FM
+            POOL_A, SC_1, usdcId, address(asyncVaultFactory).toBytes32(), VaultUpdateKind.DeployAndLink, EXTRA_GAS, FM
         );
         vm.stopPrank();
 
@@ -149,7 +143,9 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
 
         uint32 depositEpochId = batchRequestManager.nowDepositEpoch(POOL_A, SC_1, usdcId);
         D18 pricePoolPerAsset_ = hub.pricePoolPerAsset(POOL_A, SC_1, usdcId);
-        batchRequestManager.approveDeposits{value: GAS}(POOL_A, SC_1, usdcId, depositEpochId, assets, pricePoolPerAsset_, FM);
+        batchRequestManager.approveDeposits{value: GAS}(
+            POOL_A, SC_1, usdcId, depositEpochId, assets, pricePoolPerAsset_, FM
+        );
 
         uint32 issueEpochId = batchRequestManager.nowIssueEpoch(POOL_A, SC_1, usdcId);
         (D18 sharePrice,) = shareClassManager.pricePoolPerShare(POOL_A, SC_1);

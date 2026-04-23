@@ -2,10 +2,14 @@
 pragma solidity 0.8.28;
 
 import {IUnderlyingVault} from "./interfaces/IUnderlyingVault.sol";
-import {IPassthroughVault, IPassthroughVaultFactory, DepositPosition, RedeemPosition} from "./interfaces/IPassthroughVault.sol";
+import {
+    IPassthroughVault,
+    IPassthroughVaultFactory,
+    DepositPosition,
+    RedeemPosition
+} from "./interfaces/IPassthroughVault.sol";
 
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
-import {IERC20} from "protocol/misc/interfaces/IERC20.sol";
 import {SafeTransferLib} from "protocol/misc/libraries/SafeTransferLib.sol";
 import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
@@ -22,28 +26,17 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
 
-    IUnderlyingVault public immutable vault;
-
-    /// @inheritdoc IPassthroughVault
     address public immutable asset;
-    /// @inheritdoc IPassthroughVault
     address public immutable share;
-
     IERC7714 public immutable memberlist;
+    IUnderlyingVault public immutable vault;
     bool public immutable allowPermissionlessClaiming;
 
-    /// @inheritdoc IPassthroughVault
     uint128 public totalDepositClaimed;
-    /// @inheritdoc IPassthroughVault
-    uint128 public cumulativeDepositRequested;
-
-    mapping(address => DepositPosition) public depositPosition;
-
-    /// @inheritdoc IPassthroughVault
     uint128 public totalRedeemClaimed;
-    /// @inheritdoc IPassthroughVault
+    uint128 public cumulativeDepositRequested;
     uint128 public cumulativeRedeemRequested;
-
+    mapping(address => DepositPosition) public depositPosition;
     mapping(address => RedeemPosition) public redeemPosition;
 
     //----------------------------------------------------------------------------------------------
@@ -127,9 +120,8 @@ contract PassthroughVault is IPassthroughVault {
         uint128 claimable = _claimableDepositAssets(controller);
         require(claimable > 0, InsufficientClaimableShares());
 
-        uint128 actualAssets = assets == type(uint256).max
-            ? claimable
-            : MathLib.min(assets, uint256(claimable)).toUint128();
+        uint128 actualAssets =
+            assets == type(uint256).max ? claimable : MathLib.min(assets, uint256(claimable)).toUint128();
         require(actualAssets > 0, InsufficientClaimableShares());
 
         shares = _claimDeposit(actualAssets, receiver, controller);
@@ -337,6 +329,13 @@ contract PassthroughVault is IPassthroughVault {
         return pos.pending > claimable ? claimable : pos.pending;
     }
 
+    /// @dev Place the combined position (any unsettled remainder + new assets) at the back of the
+    ///      global queue. cumulativeDepositRequested advances by the new assets only; the unsettled
+    ///      remainder is carried forward without re-expanding the queue. Any previously unsettled
+    ///      portion leads to a segment of orphaned assets and a segment of overlapping assets in the
+    ///      queue, equal in size. The orphaned assets will eventually be claimable by this controller,
+    ///      once the settlement advances past the overlapping segment, resulting only in a delay for
+    ///      this controller and no disadvantage to others in the queue.
     function _enqueueDeposit(address controller, uint128 assets) internal {
         DepositPosition storage pos = depositPosition[controller];
         pos.rangeStart = cumulativeDepositRequested - pos.pending;
