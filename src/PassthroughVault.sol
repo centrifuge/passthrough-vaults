@@ -101,9 +101,9 @@ contract PassthroughVault is IPassthroughVault {
         uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         if (claimable > 0) _claimDeposit(claimable, controller, controller);
 
-        vault.requestDeposit(assets_, address(this), address(this));
-
         cumulativeDepositRequested = depositPosition[controller].enqueue(assets_, cumulativeDepositRequested);
+
+        vault.requestDeposit(assets_, address(this), address(this));
 
         emit DepositRequest(controller, owner, 0, msg.sender, assets_);
         return 0;
@@ -111,7 +111,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares) {
-        require(controller == msg.sender, InvalidController());
+        require(controller == msg.sender || allowPermissionlessClaiming && controller == receiver, InvalidController());
 
         uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         require(claimable > 0, InsufficientClaimableShares());
@@ -125,7 +125,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
-        require(controller == msg.sender, InvalidController());
+        require(controller == msg.sender || allowPermissionlessClaiming && controller == receiver, InvalidController());
 
         uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         require(claimable > 0, InsufficientClaimableShares());
@@ -137,14 +137,6 @@ contract PassthroughVault is IPassthroughVault {
 
         _claimDeposit(actualAssets.toUint128(), receiver, controller);
         assets = actualAssets;
-    }
-
-    /// @inheritdoc IPassthroughVault
-    function claimDepositFor(address controller) external returns (uint256 shares) {
-        require(allowPermissionlessClaiming, PermissionlessClaimingNotAllowed());
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        require(claimable > 0, InsufficientClaimableShares());
-        shares = _claimDeposit(claimable, controller, controller);
     }
 
     //----------------------------------------------------------------------------------------------
@@ -193,7 +185,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares) {
-        require(controller == msg.sender, InvalidController());
+        require(controller == msg.sender || allowPermissionlessClaiming && controller == receiver, InvalidController());
 
         uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
@@ -210,21 +202,13 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
-        require(controller == msg.sender, InvalidController());
+        require(controller == msg.sender || allowPermissionlessClaiming && controller == receiver, InvalidController());
 
         uint256 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
         uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
         assets = _redeem(actualShares.toUint128(), receiver, controller);
-    }
-
-    /// @inheritdoc IPassthroughVault
-    function claimRedeemFor(address controller) external returns (uint256 assets) {
-        require(allowPermissionlessClaiming, PermissionlessClaimingNotAllowed());
-        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
-        require(claimable > 0, InsufficientClaimableShares());
-        assets = _redeem(claimable, controller, controller);
     }
 
     //----------------------------------------------------------------------------------------------

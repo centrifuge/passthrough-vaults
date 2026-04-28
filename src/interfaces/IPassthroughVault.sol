@@ -57,7 +57,6 @@ interface IPassthroughVault is IERC7714 {
     error InvalidController();
     error NotMember();
     error InsufficientClaimableShares();
-    error PermissionlessClaimingNotAllowed();
 
     //----------------------------------------------------------------------------------------------
     // Immutables
@@ -96,10 +95,6 @@ interface IPassthroughVault is IERC7714 {
     /// @notice Claim settled deposit shares directly by share amount
     function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets);
 
-    /// @notice Claims all claimable deposit shares for `controller` and forwards them to `controller`.
-    ///         Reverts if allowPermissionlessClaiming is false.
-    function claimDepositFor(address controller) external returns (uint256 shares);
-
     function pendingDepositRequest(uint256 requestId, address controller) external view returns (uint256 pendingAssets);
     function claimableDepositRequest(uint256 requestId, address controller)
         external
@@ -113,10 +108,6 @@ interface IPassthroughVault is IERC7714 {
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
     function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares);
     function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets);
-
-    /// @notice Claims all claimable redeem assets for `controller` and forwards them to `controller`.
-    ///         Reverts if allowPermissionlessClaiming is false.
-    function claimRedeemFor(address controller) external returns (uint256 assets);
 
     function maxWithdraw(address controller) external view returns (uint256);
     function maxRedeem(address controller) external view returns (uint256);

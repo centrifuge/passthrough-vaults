@@ -451,7 +451,7 @@ contract PassthroughVaultDepositClaimTest is PassthroughVaultTest {
     }
 }
 
-contract PassthroughVaultClaimDepositForTest is PassthroughVaultTest {
+contract PassthroughVaultPermissionlessDepositClaimTest is PassthroughVaultTest {
     function setUp() public override {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
@@ -481,7 +481,7 @@ contract PassthroughVaultClaimDepositForTest is PassthroughVaultTest {
         );
     }
 
-    function testClaimDepositFor() public {
+    function testPermissionlessDepositClaim() public {
         share.mint(address(vault), SHARES);
         vm.mockCall(
             underlying,
@@ -494,25 +494,27 @@ contract PassthroughVaultClaimDepositForTest is PassthroughVaultTest {
         emit IPassthroughVault.Deposit(RECEIVER, USER, ASSETS, SHARES);
 
         vm.prank(RECEIVER);
-        uint256 sharesOut = vault.claimDepositFor(USER);
+        uint256 sharesOut = vault.deposit(type(uint256).max, USER, USER);
 
         assertEq(sharesOut, SHARES);
         assertEq(share.balanceOf(USER), SHARES);
         assertEq(vault.claimableDepositRequest(0, USER), 0);
     }
 
-    function testErrClaimDepositForPermissionlessClaimingNotAllowed() public {
+    function testErrPermissionlessDepositClaimNotAllowed() public {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
         PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, false);
 
-        vm.expectRevert(IPassthroughVault.PermissionlessClaimingNotAllowed.selector);
-        restrictedVault.claimDepositFor(USER);
+        vm.prank(RECEIVER);
+        vm.expectRevert(IPassthroughVault.InvalidController.selector);
+        restrictedVault.deposit(ASSETS, USER, USER);
     }
 
-    function testErrClaimDepositForInsufficientClaimable() public {
+    function testErrPermissionlessDepositClaimInsufficientClaimable() public {
+        vm.prank(RECEIVER);
         vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
-        vault.claimDepositFor(USER2);
+        vault.deposit(ASSETS, USER2, USER2);
     }
 }
 
@@ -818,7 +820,7 @@ contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
     }
 }
 
-contract PassthroughVaultClaimRedeemForTest is PassthroughVaultTest {
+contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
     function setUp() public override {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
@@ -850,7 +852,7 @@ contract PassthroughVaultClaimRedeemForTest is PassthroughVaultTest {
         );
     }
 
-    function testClaimRedeemFor() public {
+    function testPermissionlessRedeemClaim() public {
         asset.mint(address(vault), ASSETS);
         vm.mockCall(
             underlying,
@@ -861,29 +863,31 @@ contract PassthroughVaultClaimRedeemForTest is PassthroughVaultTest {
         emit IPassthroughVault.Withdraw(RECEIVER, USER, USER, ASSETS, SHARES);
 
         vm.prank(RECEIVER);
-        uint256 assets = vault.claimRedeemFor(USER);
+        uint256 assets = vault.redeem(type(uint256).max, USER, USER);
 
         assertEq(assets, ASSETS);
         assertEq(asset.balanceOf(USER), ASSETS);
         assertEq(vault.claimableRedeemRequest(0, USER), 0);
     }
 
-    function testErrPermissionlessClaimingNotAllowed() public {
+    function testErrPermissionlessRedeemClaimNotAllowed() public {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
         PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, false);
 
-        vm.expectRevert(IPassthroughVault.PermissionlessClaimingNotAllowed.selector);
-        restrictedVault.claimRedeemFor(USER);
+        vm.prank(USER2);
+        vm.expectRevert(IPassthroughVault.InvalidController.selector);
+        restrictedVault.redeem(SHARES, USER, USER);
     }
 
-    function testErrClaimRedeemForInsufficientClaimableShares() public {
+    function testErrPermissionlessRedeemClaimInsufficientClaimableShares() public {
         vm.mockCall(
             underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)), abi.encode(0)
         );
 
+        vm.prank(USER2);
         vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
-        vault.claimRedeemFor(USER);
+        vault.redeem(SHARES, USER, USER);
     }
 }
 
