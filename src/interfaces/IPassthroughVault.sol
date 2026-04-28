@@ -3,12 +3,36 @@ pragma solidity >=0.5.0;
 
 import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 
-/// @notice Combined deposit and redeem FIFO queue state for a single investor
-struct Position {
-    uint128 depositRangeStart; /// global deposit queue index (in assets) at which this investor's segment begins
-    uint128 depositPending; /// assets currently in this investor's deposit queue segment
-    uint128 redeemRangeStart; /// global redeem queue index (in shares) at which this investor's segment begins
-    uint128 redeemPending; /// shares currently in this investor's redeem queue segment
+/// @notice FIFO queue state for a single investor in one direction (deposit or redeem)
+struct QueuePosition {
+    uint128 rangeStart; /// global queue index at which this investor's segment begins
+    uint128 pending;    /// amount currently in this investor's queue segment (assets or shares, depending on direction)
+}
+
+library QueueLib {
+    function claimable(QueuePosition storage pos, uint128 settled) internal view returns (uint128) {
+        if (pos.pending == 0) return 0;
+        if (settled <= pos.rangeStart) return 0;
+        uint128 available = settled - pos.rangeStart;
+        return pos.pending > available ? available : pos.pending;
+    }
+
+    /// @dev Place the combined position (any unsettled remainder + new amount) at the back of the
+    ///      global queue. The tail advances by the new amount only; the unsettled remainder is carried
+    ///      forward without re-expanding the queue. Any previously unsettled portion leads to a segment
+    ///      of orphaned units and an equal segment of overlapping units in the queue. The orphaned units
+    ///      will eventually become claimable for this controller once settlement passes the overlap,
+    ///      causing only a delay for this controller with no disadvantage to others.
+    function enqueue(QueuePosition storage pos, uint128 amount, uint128 tail) internal returns (uint128 newTail) {
+        pos.rangeStart = tail - pos.pending;
+        pos.pending += amount;
+        return tail + amount;
+    }
+
+    function claim(QueuePosition storage pos, uint128 amount) internal {
+        pos.rangeStart += amount;
+        pos.pending -= amount;
+    }
 }
 
 /// @title  IPassthroughVault
@@ -110,7 +134,7 @@ interface IPassthroughVault is IERC7714 {
     function convertToShares(uint256 assets) external view returns (uint256);
     function convertToAssets(uint256 shares) external view returns (uint256);
 
-    /// @notice Cumulative shares ever claimed from the async deposit queue
+    /// @notice Cumulative assets ever claimed from the async deposit queue
     function totalDepositClaimed() external view returns (uint128);
 
     /// @notice Cumulative assets ever enqueued for async deposit
@@ -122,16 +146,11 @@ interface IPassthroughVault is IERC7714 {
     /// @notice Cumulative shares ever submitted for redemption by investors through this vault
     function cumulativeRedeemRequested() external view returns (uint128);
 
-    /// @notice Returns the combined deposit and redeem queue position for a given investor
-    function position(address controller)
-        external
-        view
-        returns (
-            uint128 depositRangeStart,
-            uint128 depositPending,
-            uint128 redeemRangeStart,
-            uint128 redeemPending
-        );
+    /// @notice Deposit queue position for a given investor (in assets)
+    function depositPosition(address controller) external view returns (uint128 rangeStart, uint128 pending);
+
+    /// @notice Redeem queue position for a given investor (in shares)
+    function redeemPosition(address controller) external view returns (uint128 rangeStart, uint128 pending);
 }
 
 /// @title  IPassthroughVaultFactory

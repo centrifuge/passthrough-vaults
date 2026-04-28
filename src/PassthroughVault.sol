@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IUnderlyingVault} from "./interfaces/IUnderlyingVault.sol";
-import {IPassthroughVault, IPassthroughVaultFactory, Position} from "./interfaces/IPassthroughVault.sol";
+import {IPassthroughVault, IPassthroughVaultFactory, QueuePosition, QueueLib} from "./interfaces/IPassthroughVault.sol";
 
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
 import {SafeTransferLib} from "protocol/misc/libraries/SafeTransferLib.sol";
@@ -20,6 +20,7 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
 contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
+    using QueueLib for QueuePosition;
 
     address public immutable asset;
     address public immutable share;
@@ -31,7 +32,8 @@ contract PassthroughVault is IPassthroughVault {
     uint128 public totalRedeemClaimed;
     uint128 public cumulativeDepositRequested;
     uint128 public cumulativeRedeemRequested;
-    mapping(address => Position) public position;
+    mapping(address => QueuePosition) public depositPosition;
+    mapping(address => QueuePosition) public redeemPosition;
 
     //----------------------------------------------------------------------------------------------
     // Constructor
@@ -96,12 +98,12 @@ contract PassthroughVault is IPassthroughVault {
 
         // Force-claim any settled balance so the controller receives shares from previous
         // deposits before their position moves to the back of the queue.
-        uint128 claimable = _claimableDepositAssets(controller);
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         if (claimable > 0) _claimDeposit(claimable, controller, controller);
 
         vault.requestDeposit(assets_, address(this), address(this));
 
-        _enqueueDeposit(controller, assets_);
+        cumulativeDepositRequested = depositPosition[controller].enqueue(assets_, cumulativeDepositRequested);
 
         emit DepositRequest(controller, owner, 0, msg.sender, assets_);
         return 0;
@@ -111,7 +113,7 @@ contract PassthroughVault is IPassthroughVault {
     function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares) {
         require(controller == msg.sender, InvalidController());
 
-        uint128 claimable = _claimableDepositAssets(controller);
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
         uint128 actualAssets =
@@ -125,7 +127,7 @@ contract PassthroughVault is IPassthroughVault {
     function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
         require(controller == msg.sender, InvalidController());
 
-        uint128 claimable = _claimableDepositAssets(controller);
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
         uint256 actualAssets = shares == type(uint256).max
@@ -140,7 +142,7 @@ contract PassthroughVault is IPassthroughVault {
     /// @inheritdoc IPassthroughVault
     function claimDepositFor(address controller) external returns (uint256 shares) {
         require(allowPermissionlessClaiming, PermissionlessClaimingNotAllowed());
-        uint128 claimable = _claimableDepositAssets(controller);
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         require(claimable > 0, InsufficientClaimableShares());
         shares = _claimDeposit(claimable, controller, controller);
     }
@@ -151,12 +153,13 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function pendingDepositRequest(uint256, address controller) external view returns (uint256) {
-        return position[controller].depositPending - _claimableDepositAssets(controller);
+        uint128 settled = _getCumulativeDepositSettled();
+        return depositPosition[controller].pending - depositPosition[controller].claimable(settled);
     }
 
     /// @inheritdoc IPassthroughVault
     function claimableDepositRequest(uint256, address controller) external view returns (uint256) {
-        return _claimableDepositAssets(controller);
+        return depositPosition[controller].claimable(_getCumulativeDepositSettled());
     }
 
     //----------------------------------------------------------------------------------------------
@@ -177,10 +180,10 @@ contract PassthroughVault is IPassthroughVault {
 
         // Force-claim any settled balance so the controller receives assets from previous
         // settlements before their position moves to the back of the queue.
-        uint128 claimable = _claimableRedeemShares(controller);
+        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         if (claimable > 0) _redeem(claimable, controller, controller);
 
-        _enqueueRedeem(controller, shares_);
+        cumulativeRedeemRequested = redeemPosition[controller].enqueue(shares_, cumulativeRedeemRequested);
 
         uint256 requestId = vault.requestRedeem(shares_, address(this), address(this));
 
@@ -192,7 +195,7 @@ contract PassthroughVault is IPassthroughVault {
     function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares) {
         require(controller == msg.sender, InvalidController());
 
-        uint256 claimable = _claimableRedeemShares(controller);
+        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
         // For type(uint256).max, claim all claimable shares directly.
@@ -209,7 +212,7 @@ contract PassthroughVault is IPassthroughVault {
     function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
         require(controller == msg.sender, InvalidController());
 
-        uint256 claimable = _claimableRedeemShares(controller);
+        uint256 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
         uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
@@ -219,7 +222,7 @@ contract PassthroughVault is IPassthroughVault {
     /// @inheritdoc IPassthroughVault
     function claimRedeemFor(address controller) external returns (uint256 assets) {
         require(allowPermissionlessClaiming, PermissionlessClaimingNotAllowed());
-        uint128 claimable = _claimableRedeemShares(controller);
+        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
         assets = _redeem(claimable, controller, controller);
     }
@@ -230,13 +233,14 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxDeposit(address controller) external view returns (uint256) {
-        return _claimableDepositAssets(controller);
+        return depositPosition[controller].claimable(_getCumulativeDepositSettled());
     }
 
     /// @inheritdoc IPassthroughVault
     function maxMint(address controller) external view returns (uint256) {
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
         // deposit assets → shares
-        return _scale(_claimableDepositAssets(controller), vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
+        return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
     }
 
     /// @inheritdoc IPassthroughVault
@@ -255,12 +259,13 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function pendingRedeemRequest(uint256, address controller) external view returns (uint256) {
-        return position[controller].redeemPending - _claimableRedeemShares(controller);
+        uint128 settled = _getCumulativeRedeemSettled();
+        return redeemPosition[controller].pending - redeemPosition[controller].claimable(settled);
     }
 
     /// @inheritdoc IPassthroughVault
     function claimableRedeemRequest(uint256, address controller) external view returns (uint256) {
-        return _claimableRedeemShares(controller);
+        return redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
     }
 
     //----------------------------------------------------------------------------------------------
@@ -284,7 +289,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxWithdraw(address controller) external view returns (uint256) {
-        uint256 claimable = _claimableRedeemShares(controller);
+        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         if (claimable == 0) return 0;
         // redeem shares → assets
         return _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
@@ -292,7 +297,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxRedeem(address controller) external view returns (uint256) {
-        return _claimableRedeemShares(controller);
+        return redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
     }
 
     //----------------------------------------------------------------------------------------------
@@ -314,37 +319,16 @@ contract PassthroughVault is IPassthroughVault {
     // Internal helpers
     //----------------------------------------------------------------------------------------------
 
-    function _getCumulativeDepositSettled() internal view returns (uint128) {
+    function _getCumulativeDepositSettled() private view returns (uint128) {
         return vault.maxDeposit(address(this)).toUint128() + totalDepositClaimed;
     }
 
-    function _claimableDepositAssets(address controller) internal view returns (uint128) {
-        Position storage pos = position[controller];
-        if (pos.depositPending == 0) return 0;
-        uint128 settled = _getCumulativeDepositSettled();
-        if (settled <= pos.depositRangeStart) return 0;
-        uint128 claimable = settled - pos.depositRangeStart;
-        return pos.depositPending < claimable ? pos.depositPending : claimable;
+    function _getCumulativeRedeemSettled() private view returns (uint128) {
+        return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
     }
 
-    /// @dev Place the combined position (any unsettled remainder + new assets) at the back of the
-    ///      global queue. cumulativeDepositRequested advances by the new assets only; the unsettled
-    ///      remainder is carried forward without re-expanding the queue. Any previously unsettled
-    ///      portion leads to a segment of orphaned assets and a segment of overlapping assets in the
-    ///      queue, equal in size. The orphaned assets will eventually be claimable by this controller,
-    ///      once the settlement advances past the overlapping segment, resulting only in a delay for
-    ///      this controller and no disadvantage to others in the queue.
-    function _enqueueDeposit(address controller, uint128 assets) internal {
-        Position storage pos = position[controller];
-        pos.depositRangeStart = cumulativeDepositRequested - pos.depositPending;
-        pos.depositPending += assets;
-        cumulativeDepositRequested += assets;
-    }
-
-    function _claimDeposit(uint128 assets, address receiver, address controller) internal returns (uint128 shares) {
-        Position storage pos = position[controller];
-        pos.depositRangeStart += assets;
-        pos.depositPending -= assets;
+    function _claimDeposit(uint128 assets, address receiver, address controller) private returns (uint128 shares) {
+        depositPosition[controller].claim(assets);
         totalDepositClaimed += assets;
 
         // Claim to this vault first (avoids transfer-restriction check on receiver in underlying),
@@ -355,37 +339,8 @@ contract PassthroughVault is IPassthroughVault {
         emit Deposit(msg.sender, receiver, assets, sharesOut);
     }
 
-    function _getCumulativeSettled() internal view returns (uint128) {
-        return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
-    }
-
-    function _claimableRedeemShares(address controller) internal view returns (uint128) {
-        Position storage pos = position[controller];
-        if (pos.redeemPending == 0) return 0;
-        uint128 settled = _getCumulativeSettled();
-        if (settled <= pos.redeemRangeStart) return 0;
-        uint128 claimable = settled - pos.redeemRangeStart;
-        return pos.redeemPending < claimable ? pos.redeemPending : claimable;
-    }
-
-    /// @dev Place the combined position (any unsettled remainder + new shares) at the back of the
-    ///      global queue. cumulativeRedeemRequested advances by the new shares only; the unsettled
-    ///      remainder is carried forward without re-expanding the queue. Any previously unsettled
-    ///      portion leads to a segment of orphaned shares and a segment of overlapping shares in the
-    ///      queue, equal in size. The orphaned shares will eventually be claimable by this controller,
-    ///      once the settlement advances past the overlapping segment, resulting only in a delay for
-    ///      this controller and no disadvantage to others in the queue.
-    function _enqueueRedeem(address controller, uint128 shares) internal {
-        Position storage pos = position[controller];
-        pos.redeemRangeStart = cumulativeRedeemRequested - pos.redeemPending;
-        pos.redeemPending += shares;
-        cumulativeRedeemRequested += shares;
-    }
-
-    function _redeem(uint128 shares, address receiver, address controller) internal returns (uint128 assets) {
-        Position storage pos = position[controller];
-        pos.redeemRangeStart += shares;
-        pos.redeemPending -= shares;
+    function _redeem(uint128 shares, address receiver, address controller) private returns (uint128 assets) {
+        redeemPosition[controller].claim(shares);
         totalRedeemClaimed += shares;
 
         // Claim to this vault first (avoids transfer-restriction check on receiver in underlying),

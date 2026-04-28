@@ -210,8 +210,8 @@ contract PassthroughVaultRequestDepositTest is PassthroughVaultTest {
         assertEq(vault.pendingDepositRequest(0, USER2), assets2);
         assertEq(vault.cumulativeDepositRequested(), ASSETS + assets2);
 
-        (uint128 rangeStart1,,,) = vault.position(USER);
-        (uint128 rangeStart2,,,) = vault.position(USER2);
+        (uint128 rangeStart1,) = vault.depositPosition(USER);
+        (uint128 rangeStart2,) = vault.depositPosition(USER2);
         assertEq(rangeStart1, 0);
         assertEq(rangeStart2, ASSETS); // USER2 starts where USER ends
     }
@@ -237,7 +237,7 @@ contract PassthroughVaultRequestDepositTest is PassthroughVaultTest {
 
         assertEq(vault.pendingDepositRequest(0, USER), firstAssets);
         assertEq(vault.cumulativeDepositRequested(), firstAssets);
-        (uint128 rangeStart, uint128 pending,,) = vault.position(USER);
+        (uint128 rangeStart, uint128 pending) = vault.depositPosition(USER);
         assertEq(rangeStart, 0);
         assertEq(pending, firstAssets);
 
@@ -255,7 +255,7 @@ contract PassthroughVaultRequestDepositTest is PassthroughVaultTest {
 
         assertEq(vault.pendingDepositRequest(0, USER), firstAssets + ASSETS);
         assertEq(vault.cumulativeDepositRequested(), firstAssets + ASSETS);
-        (rangeStart, pending,,) = vault.position(USER);
+        (rangeStart, pending) = vault.depositPosition(USER);
         assertEq(rangeStart, 0);
         assertEq(pending, firstAssets + ASSETS);
     }
@@ -579,8 +579,8 @@ contract PassthroughVaultRequestRedeemTest is PassthroughVaultTest {
         assertEq(vault.pendingRedeemRequest(0, USER2), shares2);
         assertEq(vault.cumulativeRedeemRequested(), SHARES + shares2);
 
-        (,, uint128 rangeStart1,) = vault.position(USER);
-        (,, uint128 rangeStart2,) = vault.position(USER2);
+        (uint128 rangeStart1,) = vault.redeemPosition(USER);
+        (uint128 rangeStart2,) = vault.redeemPosition(USER2);
         assertEq(rangeStart1, 0);
         assertEq(rangeStart2, SHARES); // USER2 starts where USER ends
     }
@@ -607,7 +607,7 @@ contract PassthroughVaultRequestRedeemTest is PassthroughVaultTest {
 
         assertEq(vault.pendingRedeemRequest(0, USER), firstShares);
         assertEq(vault.cumulativeRedeemRequested(), firstShares);
-        (,, uint128 rangeStart, uint128 pending) = vault.position(USER);
+        (uint128 rangeStart, uint128 pending) = vault.redeemPosition(USER);
         assertEq(rangeStart, 0);
         assertEq(pending, firstShares);
 
@@ -625,7 +625,7 @@ contract PassthroughVaultRequestRedeemTest is PassthroughVaultTest {
 
         assertEq(vault.pendingRedeemRequest(0, USER), firstShares + secondShares);
         assertEq(vault.cumulativeRedeemRequested(), firstShares + secondShares);
-        (,, rangeStart, pending) = vault.position(USER);
+        (rangeStart, pending) = vault.redeemPosition(USER);
         assertEq(rangeStart, 0);
         assertEq(pending, firstShares + secondShares);
     }
