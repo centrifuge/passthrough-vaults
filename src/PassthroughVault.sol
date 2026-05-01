@@ -2,7 +2,8 @@
 pragma solidity 0.8.28;
 
 import {IUnderlyingVault} from "./interfaces/IUnderlyingVault.sol";
-import {IPassthroughVault, IPassthroughVaultFactory, QueuePosition, QueueLib} from "./interfaces/IPassthroughVault.sol";
+import {IPassthroughVault, IPassthroughVaultFactory} from "./interfaces/IPassthroughVault.sol";
+import {QueuePosition, QueueLib} from "./libraries/QueueLib.sol";
 
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
 import {SafeTransferLib} from "protocol/misc/libraries/SafeTransferLib.sol";
@@ -34,10 +35,6 @@ contract PassthroughVault is IPassthroughVault {
     uint128 public cumulativeRedeemRequested;
     mapping(address => QueuePosition) public depositPosition;
     mapping(address => QueuePosition) public redeemPosition;
-
-    //----------------------------------------------------------------------------------------------
-    // Constructor
-    //----------------------------------------------------------------------------------------------
 
     constructor(address vault_, address memberlist_, bool allowPermissionlessClaiming_) {
         vault = IUnderlyingVault(vault_);
