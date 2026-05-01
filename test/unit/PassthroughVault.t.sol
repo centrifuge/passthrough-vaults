@@ -939,7 +939,7 @@ contract PassthroughVaultDepositPricingFuzzTest is PassthroughVaultTest {
         );
     }
 
-    function testFuzz_mint_receiverGetsRequestedShares(uint64 settledShares, uint64 requestedShares) public {
+    function testFuzzMintReceiverGetsRequestedShares(uint64 settledShares, uint64 requestedShares) public {
         settledShares = uint64(bound(settledShares, 1, type(uint64).max));
         requestedShares = uint64(bound(requestedShares, 1, settledShares));
 
@@ -988,7 +988,7 @@ contract PassthroughVaultRedeemPricingFuzzTest is PassthroughVaultTest {
         );
     }
 
-    function testFuzz_withdraw_receiverGetsRequestedAssets(uint64 settledAssets, uint64 requestedAssets) public {
+    function testFuzzWithdrawReceiverGetsRequestedAssets(uint64 settledAssets, uint64 requestedAssets) public {
         settledAssets = uint64(bound(settledAssets, 1, type(uint64).max));
         requestedAssets = uint64(bound(requestedAssets, 1, settledAssets));
 
