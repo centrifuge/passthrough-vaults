@@ -19,6 +19,11 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         assigns the investor a contiguous range in the global queue for that direction.
 ///
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
+///
+///         Not fully ERC-7540 compatible: operator delegation is not supported (controller must
+///         equal msg.sender, except when allowPermissionlessClaiming is set). The two-argument
+///         deposit(assets, receiver) and mint(shares, receiver) are sync-deposit entry points only —
+///         they do not claim from the async deposit queue.
 contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
     using QueueLib for QueuePosition;
@@ -156,6 +161,7 @@ contract PassthroughVault is IPassthroughVault {
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IPassthroughVault
+    /// @dev owner must equal msg.sender, delegated redemption via ERC-20 allowance is not supported
     function requestRedeem(uint256 shares, address controller, address owner)
         external
         permissioned(controller)
