@@ -33,6 +33,7 @@ contract PassthroughVault is IPassthroughVault {
     IERC7714 public immutable memberlist;
     IUnderlyingVault public immutable vault;
     bool public immutable allowPermissionlessClaiming;
+    bool public immutable isSyncDeposit;
 
     uint128 public totalDepositClaimed;
     uint128 public totalRedeemClaimed;
@@ -49,6 +50,11 @@ contract PassthroughVault is IPassthroughVault {
         allowPermissionlessClaiming = allowPermissionlessClaiming_;
 
         SafeTransferLib.safeApprove(asset, vault_, type(uint256).max);
+
+        // Probe whether the underlying supports sync deposit. previewDeposit succeeds on sync vaults
+        // and reverts on async vaults (which only support the async deposit flow).
+        (bool success,) = vault_.staticcall(abi.encodeWithSignature("previewDeposit(uint256)", 0));
+        isSyncDeposit = success;
     }
 
     //----------------------------------------------------------------------------------------------
@@ -135,7 +141,10 @@ contract PassthroughVault is IPassthroughVault {
         uint256 actualAssets = shares == type(uint256).max
             ? claimable
             // deposit shares → assets
-            : MathLib.min(_scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up), uint256(claimable));
+            : MathLib.min(
+                _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up),
+                uint256(claimable)
+            );
 
         _claimDeposit(actualAssets.toUint128(), receiver, controller);
         assets = actualAssets;
@@ -197,7 +206,10 @@ contract PassthroughVault is IPassthroughVault {
         shares = assets == type(uint256).max
             ? claimable
             // redeem assets → shares
-            : MathLib.min(_scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up), claimable);
+            : MathLib.min(
+                _scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up),
+                claimable
+            );
         require(shares > 0, InsufficientClaimableShares());
 
         _redeem(shares.toUint128(), receiver, controller);
@@ -220,14 +232,23 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxDeposit(address controller) external view returns (uint256) {
-        return depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        if (depositPosition[controller].pending > 0) {
+            return depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        }
+        if (isSyncDeposit) return vault.maxDeposit(address(this));
+        return 0;
     }
 
     /// @inheritdoc IPassthroughVault
     function maxMint(address controller) external view returns (uint256) {
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        // deposit assets → shares
-        return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
+        if (depositPosition[controller].pending > 0) {
+            uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+            // deposit assets → shares
+            return
+                _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
+        }
+        if (isSyncDeposit) return vault.maxMint(address(this));
+        return 0;
     }
 
     /// @inheritdoc IPassthroughVault
@@ -279,7 +300,8 @@ contract PassthroughVault is IPassthroughVault {
         uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         if (claimable == 0) return 0;
         // redeem shares → assets
-        return _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
+        return
+            _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
     }
 
     /// @inheritdoc IPassthroughVault
@@ -338,7 +360,11 @@ contract PassthroughVault is IPassthroughVault {
         emit Withdraw(msg.sender, receiver, controller, assets, shares);
     }
 
-    function _scale(uint256 amount, uint256 num, uint256 denom, MathLib.Rounding rounding) private pure returns (uint256) {
+    function _scale(uint256 amount, uint256 num, uint256 denom, MathLib.Rounding rounding)
+        private
+        pure
+        returns (uint256)
+    {
         if (denom == 0) return 0;
         return amount.mulDiv(num, denom, rounding);
     }

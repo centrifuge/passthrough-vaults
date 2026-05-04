@@ -935,7 +935,9 @@ contract PassthroughVaultDepositPricingFuzzTest is PassthroughVaultTest {
         vault.requestDeposit(ASSETS, USER, USER);
 
         vm.mockCall(
-            underlying, abi.encodeWithSelector(IPassthroughVault.maxDeposit.selector, address(vault)), abi.encode(ASSETS)
+            underlying,
+            abi.encodeWithSelector(IPassthroughVault.maxDeposit.selector, address(vault)),
+            abi.encode(ASSETS)
         );
     }
 
@@ -944,7 +946,9 @@ contract PassthroughVaultDepositPricingFuzzTest is PassthroughVaultTest {
         requestedShares = uint64(bound(requestedShares, 1, settledShares));
 
         vm.mockCall(
-            underlying, abi.encodeWithSelector(IPassthroughVault.maxMint.selector, address(vault)), abi.encode(settledShares)
+            underlying,
+            abi.encodeWithSelector(IPassthroughVault.maxMint.selector, address(vault)),
+            abi.encode(settledShares)
         );
 
         uint256 actualAssets = MathLib.mulDiv(requestedShares, uint256(ASSETS), settledShares, MathLib.Rounding.Up);

@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 /// @notice FIFO queue state for a single investor in one direction (deposit or redeem)
 struct QueuePosition {
     uint128 rangeStart; /// global queue index at which this investor's segment begins
-    uint128 pending;    /// amount currently in this investor's queue segment (assets or shares, depending on direction)
+    uint128 pending; /// amount currently in this investor's queue segment (assets or shares, depending on direction)
 }
 
 library QueueLib {

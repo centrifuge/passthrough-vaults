@@ -41,6 +41,9 @@ interface IPassthroughVault is IERC7714 {
     /// @notice Whether anyone may call claimRedeemFor on behalf of a controller
     function allowPermissionlessClaiming() external view returns (bool);
 
+    /// @notice True when the underlying vault uses sync deposit, false otherwise
+    function isSyncDeposit() external view returns (bool);
+
     //----------------------------------------------------------------------------------------------
     // Sync deposit
     //----------------------------------------------------------------------------------------------
