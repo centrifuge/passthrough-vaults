@@ -38,37 +38,28 @@ interface IPassthroughVault is IERC7714 {
     /// @dev Returns the zero address when no memberlist is configured (all addresses permitted)
     function memberlist() external view returns (IERC7714);
 
-    /// @notice When true, 2-arg and 3-arg deposit/mint claim from the async deposit queue;
+    /// @notice When true, 2-arg and 3-arg mint claim from the async deposit queue;
     ///         when false, they perform an immediate sync deposit into the underlying vault.
     function asyncDeposit() external view returns (bool);
 
-    /// @notice When true, anyone may call deposit/mint/redeem/withdraw on behalf of a controller,
+    /// @notice When true, anyone may call mint/withdraw on behalf of a controller,
     ///         provided the receiver equals the controller.
     function claimForAll() external view returns (bool);
 
     //----------------------------------------------------------------------------------------------
-    // Sync deposit
+    // Deposit (sync mint or async claim)
     //----------------------------------------------------------------------------------------------
 
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
-    function maxDeposit(address receiver) external view returns (uint256);
+    function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets);
     function maxMint(address receiver) external view returns (uint256);
-    function previewDeposit(uint256 assets) external view returns (uint256);
     function previewMint(uint256 shares) external view returns (uint256);
 
     //----------------------------------------------------------------------------------------------
-    // Async deposit
+    // Async deposit request
     //----------------------------------------------------------------------------------------------
 
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256 requestId);
-
-    /// @notice Claim settled deposit shares by specifying the corresponding asset amount
-    function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares);
-
-    /// @notice Claim settled deposit shares directly by share amount
-    function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets);
-
     function pendingDepositRequest(uint256 requestId, address controller) external view returns (uint256 pendingAssets);
     function claimableDepositRequest(uint256 requestId, address controller)
         external
@@ -81,7 +72,6 @@ interface IPassthroughVault is IERC7714 {
 
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
     function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares);
-    function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets);
 
     function maxWithdraw(address controller) external view returns (uint256);
     function maxRedeem(address controller) external view returns (uint256);

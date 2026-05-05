@@ -46,9 +46,9 @@ contract PassthroughVaultTest is IntegrationBaseTest {
         uint256 expectedShares = depositAmount * SHARE_SCALE;
 
         vm.prank(INVESTOR);
-        uint256 sharesMinted = passthroughVault.deposit(depositAmount, INVESTOR);
+        uint256 assetsSpent = passthroughVault.mint(expectedShares, INVESTOR);
 
-        assertEq(sharesMinted, expectedShares);
+        assertEq(assetsSpent, depositAmount);
         assertEq(ERC20(underlying.share()).balanceOf(INVESTOR), expectedShares);
 
         vm.prank(INVESTOR);
@@ -62,9 +62,9 @@ contract PassthroughVaultTest is IntegrationBaseTest {
 
         uint256 balanceBefore = usdc.balanceOf(INVESTOR);
         vm.prank(INVESTOR);
-        uint256 assetsReceived = passthroughVault.redeem(expectedShares, INVESTOR, INVESTOR);
+        uint256 sharesReturned = passthroughVault.withdraw(depositAmount, INVESTOR, INVESTOR);
 
-        assertEq(assetsReceived, depositAmount);
+        assertEq(sharesReturned, expectedShares);
         assertEq(usdc.balanceOf(INVESTOR) - balanceBefore, depositAmount);
         assertEq(underlying.maxWithdraw(address(passthroughVault)), 0);
     }
@@ -93,9 +93,9 @@ contract PassthroughVaultTest is IntegrationBaseTest {
         // INVESTOR deposits 1500e6 so they have 500e18 shares left after the first requestRedeem (1000e18),
         // which they use for the second requestRedeem that triggers the force-claim and re-queuing.
         vm.prank(INVESTOR);
-        passthroughVault.deposit(1500e6, INVESTOR);
+        passthroughVault.mint(1500e18, INVESTOR);
         vm.prank(INVESTOR2);
-        passthroughVault.deposit(1000e6, INVESTOR2);
+        passthroughVault.mint(1000e18, INVESTOR2);
 
         vm.prank(INVESTOR);
         passthroughVault.requestRedeem(1000e18, INVESTOR, INVESTOR);
@@ -189,9 +189,7 @@ contract PassthroughVaultAsyncDepositTest is IntegrationBaseTest {
         assertGe(passthroughVault.claimableDepositRequest(0, INVESTOR), depositAmount - 1); // rounding
 
         vm.prank(INVESTOR);
-        uint256 sharesMinted = passthroughVault.deposit(depositAmount, INVESTOR, INVESTOR);
-
-        assertEq(sharesMinted, expectedShares);
+        passthroughVault.mint(expectedShares, INVESTOR, INVESTOR);
         assertEq(ERC20(underlying.share()).balanceOf(INVESTOR), expectedShares);
         assertEq(passthroughVault.claimableDepositRequest(0, INVESTOR), 0);
 
@@ -204,9 +202,9 @@ contract PassthroughVaultAsyncDepositTest is IntegrationBaseTest {
         _settleRedeem(passthroughVault, uint128(expectedShares));
 
         vm.prank(INVESTOR);
-        uint256 assetsReceived = passthroughVault.redeem(expectedShares, INVESTOR, INVESTOR);
+        uint256 sharesReturned = passthroughVault.withdraw(type(uint256).max, INVESTOR, INVESTOR);
 
-        assertEq(assetsReceived, depositAmount);
+        assertEq(sharesReturned, expectedShares);
         assertEq(usdc.balanceOf(INVESTOR), INITIAL_BALANCE);
     }
 }
