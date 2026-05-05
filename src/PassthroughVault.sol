@@ -33,10 +33,10 @@ contract PassthroughVault is IPassthroughVault {
 
     address public immutable asset;
     address public immutable share;
+    bool public immutable claimForAll;
+    bool public immutable asyncDeposit;
     IERC7714 public immutable memberlist;
     IUnderlyingVault public immutable vault;
-    bool public immutable asyncDeposit;
-    bool public immutable claimForAll;
 
     uint128 public totalDepositClaimed;
     uint128 public totalRedeemClaimed;
@@ -57,35 +57,6 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     //----------------------------------------------------------------------------------------------
-    // Async deposit request
-    //----------------------------------------------------------------------------------------------
-
-    /// @inheritdoc IPassthroughVault
-    function requestDeposit(uint256 assets, address controller, address owner)
-        external
-        permissioned(controller)
-        returns (uint256)
-    {
-        require(owner == msg.sender, InvalidOwner());
-
-        uint128 assets_ = assets.toUint128();
-
-        SafeTransferLib.safeTransferFrom(asset, owner, address(this), assets_);
-
-        // Force-claim any settled balance so the controller receives shares from previous
-        // deposits before their position moves to the back of the queue.
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        if (claimable > 0) _claimDeposit(claimable, controller, controller);
-
-        cumulativeDepositRequested = depositPosition[controller].enqueue(assets_, cumulativeDepositRequested);
-
-        vault.requestDeposit(assets_, address(this), address(this));
-
-        emit DepositRequest(controller, owner, 0, msg.sender, assets_);
-        return 0;
-    }
-
-    //----------------------------------------------------------------------------------------------
     // Deposit (sync or async claim, depending on asyncDeposit flag)
     //----------------------------------------------------------------------------------------------
 
@@ -101,6 +72,7 @@ contract PassthroughVault is IPassthroughVault {
         returns (uint256 assets)
     {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
+
         if (asyncDeposit) {
             uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
             require(claimable > 0, InsufficientClaimableShares());
@@ -124,8 +96,31 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     //----------------------------------------------------------------------------------------------
-    // ERC-7540 deposit views
+    // ERC-7540 deposit flow
     //----------------------------------------------------------------------------------------------
+
+    /// @inheritdoc IPassthroughVault
+    function requestDeposit(uint256 assets, address controller, address owner)
+        external
+        permissioned(controller)
+        returns (uint256)
+    {
+        require(owner == msg.sender, InvalidOwner());
+
+        uint128 assets_ = assets.toUint128();
+        SafeTransferLib.safeTransferFrom(asset, owner, address(this), assets_);
+
+        // Force-claim any settled balance so the controller receives shares from previous
+        // deposits before their position moves to the back of the queue.
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        if (claimable > 0) _claimDeposit(claimable, controller, controller);
+
+        cumulativeDepositRequested = depositPosition[controller].enqueue(assets_, cumulativeDepositRequested);
+        vault.requestDeposit(assets_, address(this), address(this));
+
+        emit DepositRequest(controller, owner, 0, msg.sender, assets_);
+        return 0;
+    }
 
     /// @inheritdoc IPassthroughVault
     function pendingDepositRequest(uint256, address controller) external view returns (uint256) {
