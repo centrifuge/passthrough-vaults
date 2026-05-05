@@ -61,44 +61,43 @@ contract PassthroughVault is IPassthroughVault {
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IPassthroughVault
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
-        if (asyncDeposit) {
-            shares = _claimDepositAssets(assets, receiver, msg.sender);
-        } else {
-            require(isPermissioned(msg.sender), NotMember());
-            shares = _deposit(assets, receiver);
-        }
+    function deposit(uint256 assets, address receiver) external permissioned(msg.sender) returns (uint256 shares) {
+        shares = deposit(assets, receiver, msg.sender);
     }
 
     /// @inheritdoc IPassthroughVault
-    function mint(uint256 shares, address receiver) external returns (uint256 assets) {
-        if (asyncDeposit) {
-            assets = _claimDepositShares(shares, receiver, msg.sender);
-        } else {
-            require(isPermissioned(msg.sender), NotMember());
-            assets = _mint(shares, receiver);
-        }
+    function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
+        assets = mint(shares, receiver, msg.sender);
     }
 
     /// @inheritdoc IPassthroughVault
-    function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver, address controller) public permissioned(msg.sender) returns (uint256 shares) {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
         if (asyncDeposit) {
             shares = _claimDepositAssets(assets, receiver, controller);
         } else {
-            require(isPermissioned(msg.sender), NotMember());
-            shares = _deposit(assets, receiver);
+            uint128 assets_ = assets.toUint128();
+            // Deposit to underlying vault, claiming to this vault first (avoids transfer-restriction
+            // membership check on receiver), then forward shares to the actual receiver.
+            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets_);
+            shares = vault.deposit(assets_, address(this));
+            SafeTransferLib.safeTransfer(share, receiver, shares);
+            emit Deposit(msg.sender, receiver, assets_, shares);
         }
     }
 
     /// @inheritdoc IPassthroughVault
-    function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
+    function mint(uint256 shares, address receiver, address controller) public permissioned(msg.sender) returns (uint256 assets) {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
         if (asyncDeposit) {
             assets = _claimDepositShares(shares, receiver, controller);
         } else {
-            require(isPermissioned(msg.sender), NotMember());
-            assets = _mint(shares, receiver);
+            uint128 shares_ = shares.toUint128();
+            assets = vault.previewMint(shares_);
+            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets);
+            assets = vault.mint(shares_, address(this));
+            SafeTransferLib.safeTransfer(share, receiver, shares_);
+            emit Deposit(msg.sender, receiver, assets, shares_);
         }
     }
 
@@ -315,25 +314,6 @@ contract PassthroughVault is IPassthroughVault {
 
     function _getCumulativeRedeemSettled() internal view returns (uint128) {
         return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
-    }
-
-    function _deposit(uint256 assets, address receiver) internal returns (uint256 shares) {
-        uint128 assets_ = assets.toUint128();
-        // Deposit to underlying vault, claiming to this vault first (avoids transfer-restriction
-        // membership check on receiver), then forward shares to the actual receiver.
-        SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets_);
-        shares = vault.deposit(assets_, address(this));
-        SafeTransferLib.safeTransfer(share, receiver, shares);
-        emit Deposit(msg.sender, receiver, assets_, shares);
-    }
-
-    function _mint(uint256 shares, address receiver) internal returns (uint256 assets) {
-        uint128 shares_ = shares.toUint128();
-        assets = vault.previewMint(shares_);
-        SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets);
-        assets = vault.mint(shares_, address(this));
-        SafeTransferLib.safeTransfer(share, receiver, shares_);
-        emit Deposit(msg.sender, receiver, assets, shares_);
     }
 
     function _claimDepositAssets(uint256 assets, address receiver, address controller)
