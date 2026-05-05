@@ -57,34 +57,6 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     //----------------------------------------------------------------------------------------------
-    // Deposit (sync or async claim, depending on asyncDeposit flag)
-    //----------------------------------------------------------------------------------------------
-
-    /// @inheritdoc IPassthroughVault
-    function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
-        assets = mint(shares, receiver, msg.sender);
-    }
-
-    /// @inheritdoc IPassthroughVault
-    function mint(uint256 shares, address receiver, address controller)
-        public
-        permissioned(msg.sender)
-        returns (uint256 assets)
-    {
-        require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
-        if (asyncDeposit) {
-            assets = _claimDepositShares(shares, receiver, controller);
-        } else {
-            uint128 shares_ = shares.toUint128();
-            assets = vault.previewMint(shares_);
-            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets);
-            assets = vault.mint(shares_, address(this));
-            SafeTransferLib.safeTransfer(share, receiver, shares_);
-            emit Deposit(msg.sender, receiver, assets, shares_);
-        }
-    }
-
-    //----------------------------------------------------------------------------------------------
     // Async deposit request
     //----------------------------------------------------------------------------------------------
 
@@ -111,6 +83,44 @@ contract PassthroughVault is IPassthroughVault {
 
         emit DepositRequest(controller, owner, 0, msg.sender, assets_);
         return 0;
+    }
+
+    //----------------------------------------------------------------------------------------------
+    // Deposit (sync or async claim, depending on asyncDeposit flag)
+    //----------------------------------------------------------------------------------------------
+
+    /// @inheritdoc IPassthroughVault
+    function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
+        assets = mint(shares, receiver, msg.sender);
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function mint(uint256 shares, address receiver, address controller)
+        public
+        permissioned(msg.sender)
+        returns (uint256 assets)
+    {
+        require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
+        if (asyncDeposit) {
+            uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+            require(claimable > 0, InsufficientClaimableShares());
+            uint256 actualAssets = shares == type(uint256).max
+                ? claimable
+                // deposit shares → assets
+                : MathLib.min(
+                    _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up),
+                    uint256(claimable)
+                );
+            _claimDeposit(actualAssets.toUint128(), receiver, controller);
+            assets = actualAssets;
+        } else {
+            uint128 shares_ = shares.toUint128();
+            assets = vault.previewMint(shares_);
+            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets);
+            assets = vault.mint(shares_, address(this));
+            SafeTransferLib.safeTransfer(share, receiver, shares_);
+            emit Deposit(msg.sender, receiver, assets, shares_);
+        }
     }
 
     //----------------------------------------------------------------------------------------------
@@ -271,24 +281,7 @@ contract PassthroughVault is IPassthroughVault {
         return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
     }
 
-    function _claimDepositShares(uint256 shares, address receiver, address controller)
-        internal
-        returns (uint256 assets)
-    {
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        require(claimable > 0, InsufficientClaimableShares());
-        uint256 actualAssets = shares == type(uint256).max
-            ? claimable
-            // deposit shares → assets
-            : MathLib.min(
-                _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up),
-                uint256(claimable)
-            );
-        _claimDeposit(actualAssets.toUint128(), receiver, controller);
-        assets = actualAssets;
-    }
-
-    function _claimDeposit(uint128 assets, address receiver, address controller) internal returns (uint128 shares) {
+    function _claimDeposit(uint128 assets, address receiver, address controller) internal {
         depositPosition[controller].claim(assets);
         totalDepositClaimed += assets;
 
@@ -296,7 +289,6 @@ contract PassthroughVault is IPassthroughVault {
         // then forward shares to the actual receiver.
         uint256 sharesOut = vault.deposit(assets, address(this), address(this));
         if (sharesOut > 0) SafeTransferLib.safeTransfer(share, receiver, sharesOut);
-        shares = sharesOut.toUint128();
         emit Deposit(msg.sender, receiver, assets, sharesOut);
     }
 
