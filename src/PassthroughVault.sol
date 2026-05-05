@@ -23,9 +23,9 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         Not fully ERC-7540 compatible: operator delegation is not supported (controller must
 ///         equal msg.sender, except when claimForAll is set).
 ///
-///         When asyncDeposit is true, both 2-arg and 3-arg deposit/mint claim from the async
+///         When asyncDeposit is true, both 2-arg and 3-arg mint claims from the async
 ///         deposit queue. When false, they perform an immediate sync deposit into the underlying.
-///         owner must equal msg.sender in requestRedeem — delegated redemption via ERC-20
+///         owner must equal msg.sender in requestRedeem. Delegated redemption via ERC-20
 ///         allowance is not supported.
 contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
@@ -66,7 +66,11 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
-    function mint(uint256 shares, address receiver, address controller) public permissioned(msg.sender) returns (uint256 assets) {
+    function mint(uint256 shares, address receiver, address controller)
+        public
+        permissioned(msg.sender)
+        returns (uint256 assets)
+    {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
         if (asyncDeposit) {
             assets = _claimDepositShares(shares, receiver, controller);
@@ -180,14 +184,11 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxMint(address controller) external view returns (uint256) {
-        if (depositPosition[controller].pending > 0) {
-            uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-            // deposit assets → shares
-            return
-                _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
-        }
         if (!asyncDeposit) return vault.maxMint(address(this));
-        return 0;
+
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        // deposit assets → shares
+        return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
     }
 
     /// @inheritdoc IPassthroughVault
