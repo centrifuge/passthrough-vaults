@@ -170,10 +170,10 @@ contract PassthroughVault is IPassthroughVault {
 
         cumulativeRedeemRequested = redeemPosition[controller].enqueue(shares_, cumulativeRedeemRequested);
 
-        uint256 requestId = vault.requestRedeem(shares_, address(this), address(this));
+        vault.requestRedeem(shares_, address(this), address(this));
 
-        emit RedeemRequest(controller, owner, requestId, msg.sender, shares_);
-        return requestId;
+        emit RedeemRequest(controller, owner, 0, msg.sender, shares_);
+        return 0;
     }
 
     /// @inheritdoc IPassthroughVault
