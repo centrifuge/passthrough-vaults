@@ -25,7 +25,7 @@ contract PassthroughVaultTest is IntegrationBaseTest {
         super.setUp();
 
         (underlying, assetId) = _deploySyncDepositVault();
-        passthroughVault = _deployPassthroughVault(address(underlying), false);
+        passthroughVault = _deployPassthroughVault(address(underlying), false, false);
 
         _mintUSDC(INVESTOR, INITIAL_BALANCE);
         _mintUSDC(INVESTOR2, INITIAL_BALANCE);
@@ -161,7 +161,7 @@ contract PassthroughVaultAsyncDepositTest is IntegrationBaseTest {
         super.setUp();
 
         (underlying, assetId) = _deployAsyncDepositVault();
-        passthroughVault = _deployPassthroughVault(address(underlying), false);
+        passthroughVault = _deployPassthroughVault(address(underlying), true, false);
 
         _mintUSDC(INVESTOR, INITIAL_BALANCE);
 

@@ -30,7 +30,7 @@ contract PassthroughVaultTest is Test {
     function setUp() public virtual {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        vault = new PassthroughVault(underlying, memberlist, false);
+        vault = new PassthroughVault(underlying, memberlist, true, false);
         _setupMocks();
     }
 
@@ -59,7 +59,7 @@ contract PassthroughVaultConstructorTest is PassthroughVaultTest {
     function testNoWhitelistAllowsAll() public {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        PassthroughVault noWhitelistVault = new PassthroughVault(underlying, address(0), false);
+        PassthroughVault noWhitelistVault = new PassthroughVault(underlying, address(0), false, false);
 
         asset.mint(USER, ASSETS);
         vm.mockCall(underlying, abi.encodeWithSignature("deposit(uint256,address)"), abi.encode(ASSETS));
@@ -72,6 +72,13 @@ contract PassthroughVaultConstructorTest is PassthroughVaultTest {
 }
 
 contract PassthroughVaultDepositTest is PassthroughVaultTest {
+    function setUp() public override {
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
+        vault = new PassthroughVault(underlying, memberlist, false, false);
+        _setupMocks();
+    }
+
     function testDeposit() public {
         uint256 sharesOut = ASSETS;
 
@@ -110,6 +117,13 @@ contract PassthroughVaultDepositTest is PassthroughVaultTest {
 }
 
 contract PassthroughVaultMintTest is PassthroughVaultTest {
+    function setUp() public override {
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
+        vault = new PassthroughVault(underlying, memberlist, false, false);
+        _setupMocks();
+    }
+
     function testMint() public {
         uint128 shares = 100e18;
         uint256 previewAssets = 1000e6;
@@ -455,7 +469,7 @@ contract PassthroughVaultPermissionlessDepositClaimTest is PassthroughVaultTest 
     function setUp() public override {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        vault = new PassthroughVault(underlying, memberlist, true);
+        vault = new PassthroughVault(underlying, memberlist, true, true);
         _setupMocks();
 
         asset.mint(USER, ASSETS);
@@ -504,7 +518,7 @@ contract PassthroughVaultPermissionlessDepositClaimTest is PassthroughVaultTest 
     function testErrPermissionlessDepositClaimNotAllowed() public {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, false);
+        PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, true, false);
 
         vm.prank(RECEIVER);
         vm.expectRevert(IPassthroughVault.InvalidController.selector);
@@ -824,7 +838,7 @@ contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
     function setUp() public override {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        vault = new PassthroughVault(underlying, memberlist, true);
+        vault = new PassthroughVault(underlying, memberlist, true, true);
         _setupMocks();
 
         share.mint(USER, SHARES);
@@ -873,7 +887,7 @@ contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
     function testErrPermissionlessRedeemClaimNotAllowed() public {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, false);
+        PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, true, false);
 
         vm.prank(USER2);
         vm.expectRevert(IPassthroughVault.InvalidController.selector);

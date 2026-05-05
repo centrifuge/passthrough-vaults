@@ -119,11 +119,11 @@ contract IntegrationBaseTest is CentrifugeIntegrationTestWithUtils {
         vault = AsyncVault(address(vaultRegistry.vault(POOL_A, SC_1, usdcId, asyncRequestManager)));
     }
 
-    function _deployPassthroughVault(address underlying, bool allowPermissionlessClaiming)
+    function _deployPassthroughVault(address underlying, bool asyncDeposit, bool claimForAll)
         internal
         returns (PassthroughVault pv)
     {
-        pv = new PassthroughVault(underlying, address(0), allowPermissionlessClaiming);
+        pv = new PassthroughVault(underlying, address(0), asyncDeposit, claimForAll);
 
         vm.prank(FM);
         hub.updateRestriction{value: GAS}(

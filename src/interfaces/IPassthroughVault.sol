@@ -38,11 +38,13 @@ interface IPassthroughVault is IERC7714 {
     /// @dev Returns the zero address when no memberlist is configured (all addresses permitted)
     function memberlist() external view returns (IERC7714);
 
-    /// @notice Whether anyone may call claimRedeemFor on behalf of a controller
-    function allowPermissionlessClaiming() external view returns (bool);
+    /// @notice When true, 2-arg and 3-arg deposit/mint claim from the async deposit queue;
+    ///         when false, they perform an immediate sync deposit into the underlying vault.
+    function asyncDeposit() external view returns (bool);
 
-    /// @notice True when the underlying vault uses sync deposit, false otherwise
-    function isSyncDeposit() external view returns (bool);
+    /// @notice When true, anyone may call deposit/mint/redeem/withdraw on behalf of a controller,
+    ///         provided the receiver equals the controller.
+    function claimForAll() external view returns (bool);
 
     //----------------------------------------------------------------------------------------------
     // Sync deposit
@@ -120,12 +122,12 @@ interface IPassthroughVault is IERC7714 {
 /// @notice Factory for deploying passthrough vault contracts
 interface IPassthroughVaultFactory {
     /// @notice Deploys a new passthrough vault wrapping `vault`
-    function newVault(address vault, address memberlist, bool allowPermissionlessClaiming)
+    function newVault(address vault, address memberlist, bool asyncDeposit, bool claimForAll)
         external
         returns (IPassthroughVault);
 
     /// @notice Returns the deterministic address a vault would be deployed to without deploying it
-    function getVaultAddress(address vault, address memberlist, bool allowPermissionlessClaiming)
+    function getVaultAddress(address vault, address memberlist, bool asyncDeposit, bool claimForAll)
         external
         view
         returns (address);
