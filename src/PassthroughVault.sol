@@ -20,7 +20,8 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
 ///
-///         Not fully ERC-7540 compatible: operator delegation is not supported (controller must
+///         Not fully ERC-7540 compatible: deposit() and redeem() are not supported (use mint()
+///         and withdraw() instead); operator delegation is not supported (controller must
 ///         equal msg.sender, except when claimForAll is set).
 ///
 ///         When asyncDeposit is true, both 2-arg and 3-arg mint claims from the async
@@ -56,9 +57,37 @@ contract PassthroughVault is IPassthroughVault {
         SafeTransferLib.safeApprove(asset, vault_, type(uint256).max);
     }
 
+    modifier permissioned(address controller) {
+        require(isPermissioned(controller), NotMember());
+        _;
+    }
+
     //----------------------------------------------------------------------------------------------
-    // Deposit (sync or async claim, depending on asyncDeposit flag)
+    // ERC-7540 deposit
     //----------------------------------------------------------------------------------------------
+
+    /// @inheritdoc IPassthroughVault
+    function requestDeposit(uint256 assets, address controller, address owner)
+        external
+        permissioned(controller)
+        returns (uint256)
+    {
+        require(owner == msg.sender, InvalidOwner());
+
+        uint128 assets_ = assets.toUint128();
+        SafeTransferLib.safeTransferFrom(asset, owner, address(this), assets_);
+
+        // Force-claim any settled balance so the controller receives shares from previous
+        // deposits before their position moves to the back of the queue.
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        if (claimable > 0) _claimDeposit(claimable, controller, controller);
+
+        cumulativeDepositRequested = depositPosition[controller].enqueue(assets_, cumulativeDepositRequested);
+        vault.requestDeposit(assets_, address(this), address(this));
+
+        emit DepositRequest(controller, owner, 0, msg.sender, assets_);
+        return 0;
+    }
 
     /// @inheritdoc IPassthroughVault
     function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
@@ -95,33 +124,6 @@ contract PassthroughVault is IPassthroughVault {
         }
     }
 
-    //----------------------------------------------------------------------------------------------
-    // ERC-7540 deposit flow
-    //----------------------------------------------------------------------------------------------
-
-    /// @inheritdoc IPassthroughVault
-    function requestDeposit(uint256 assets, address controller, address owner)
-        external
-        permissioned(controller)
-        returns (uint256)
-    {
-        require(owner == msg.sender, InvalidOwner());
-
-        uint128 assets_ = assets.toUint128();
-        SafeTransferLib.safeTransferFrom(asset, owner, address(this), assets_);
-
-        // Force-claim any settled balance so the controller receives shares from previous
-        // deposits before their position moves to the back of the queue.
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        if (claimable > 0) _claimDeposit(claimable, controller, controller);
-
-        cumulativeDepositRequested = depositPosition[controller].enqueue(assets_, cumulativeDepositRequested);
-        vault.requestDeposit(assets_, address(this), address(this));
-
-        emit DepositRequest(controller, owner, 0, msg.sender, assets_);
-        return 0;
-    }
-
     /// @inheritdoc IPassthroughVault
     function pendingDepositRequest(uint256, address controller) external view returns (uint256) {
         uint128 settled = _getCumulativeDepositSettled();
@@ -133,12 +135,41 @@ contract PassthroughVault is IPassthroughVault {
         return depositPosition[controller].claimable(_getCumulativeDepositSettled());
     }
 
+    /// @inheritdoc IPassthroughVault
+    function maxMint(address controller) external view returns (uint256) {
+        if (!asyncDeposit) return vault.maxMint(address(this));
+
+        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        // deposit assets → shares
+        return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function previewMint(uint256 shares) external view returns (uint256) {
+        return vault.previewMint(shares);
+    }
+
+    function _claimDeposit(uint128 assets, address receiver, address controller) internal {
+        depositPosition[controller].claim(assets);
+        totalDepositClaimed += assets;
+
+        // Claim to this vault first (avoids transfer-restriction check on receiver in underlying),
+        // then forward shares to the actual receiver.
+        uint256 sharesOut = vault.deposit(assets, address(this), address(this));
+        if (sharesOut > 0) SafeTransferLib.safeTransfer(share, receiver, sharesOut);
+        emit Deposit(msg.sender, receiver, assets, sharesOut);
+    }
+
+    function _getCumulativeDepositSettled() internal view returns (uint128) {
+        return vault.maxDeposit(address(this)).toUint128() + totalDepositClaimed;
+    }
+
     //----------------------------------------------------------------------------------------------
-    // Async redeem
+    // ERC-7540 redeem
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IPassthroughVault
-    /// @dev owner must equal msg.sender — delegated redemption via ERC-20 allowance is not supported.
+    /// @dev owner must equal msg.sender, delegated redemption via ERC-20 allowance is not supported.
     function requestRedeem(uint256 shares, address controller, address owner)
         external
         permissioned(controller)
@@ -147,7 +178,6 @@ contract PassthroughVault is IPassthroughVault {
         require(owner == msg.sender, InvalidOwner());
 
         uint128 shares_ = shares.toUint128();
-
         SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
 
         // Force-claim any settled balance so the controller receives assets from previous
@@ -156,7 +186,6 @@ contract PassthroughVault is IPassthroughVault {
         if (claimable > 0) _redeem(claimable, controller, controller);
 
         cumulativeRedeemRequested = redeemPosition[controller].enqueue(shares_, cumulativeRedeemRequested);
-
         vault.requestRedeem(shares_, address(this), address(this));
 
         emit RedeemRequest(controller, owner, 0, msg.sender, shares_);
@@ -183,28 +212,6 @@ contract PassthroughVault is IPassthroughVault {
         _redeem(shares.toUint128(), receiver, controller);
     }
 
-    //----------------------------------------------------------------------------------------------
-    // ERC-4626 / ERC-7575 deposit views
-    //----------------------------------------------------------------------------------------------
-
-    /// @inheritdoc IPassthroughVault
-    function maxMint(address controller) external view returns (uint256) {
-        if (!asyncDeposit) return vault.maxMint(address(this));
-
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        // deposit assets → shares
-        return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
-    }
-
-    /// @inheritdoc IPassthroughVault
-    function previewMint(uint256 shares) external view returns (uint256) {
-        return vault.previewMint(shares);
-    }
-
-    //----------------------------------------------------------------------------------------------
-    // ERC-7540 redeem views
-    //----------------------------------------------------------------------------------------------
-
     /// @inheritdoc IPassthroughVault
     function pendingRedeemRequest(uint256, address controller) external view returns (uint256) {
         uint128 settled = _getCumulativeRedeemSettled();
@@ -216,8 +223,38 @@ contract PassthroughVault is IPassthroughVault {
         return redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
     }
 
+    /// @inheritdoc IPassthroughVault
+    function maxWithdraw(address controller) external view returns (uint256) {
+        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
+        if (claimable == 0) return 0;
+        // redeem shares → assets
+        return
+            _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function maxRedeem(address controller) external view returns (uint256) {
+        return redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
+    }
+
+    function _redeem(uint128 shares, address receiver, address controller) internal returns (uint128 assets) {
+        redeemPosition[controller].claim(shares);
+        totalRedeemClaimed += shares;
+
+        // Claim to this vault first (avoids transfer-restriction check on receiver in underlying),
+        // then forward assets to the actual receiver.
+        uint256 grossAssets = vault.redeem(shares, address(this), address(this));
+        if (grossAssets > 0) SafeTransferLib.safeTransfer(asset, receiver, grossAssets);
+        assets = grossAssets.toUint128();
+        emit Withdraw(msg.sender, receiver, controller, assets, shares);
+    }
+
+    function _getCumulativeRedeemSettled() internal view returns (uint128) {
+        return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
+    }
+    
     //----------------------------------------------------------------------------------------------
-    // ERC-4626 / ERC-7575 redeem views
+    // ERC-4626
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IPassthroughVault
@@ -235,28 +272,9 @@ contract PassthroughVault is IPassthroughVault {
         return vault.convertToAssets(shares_);
     }
 
-    /// @inheritdoc IPassthroughVault
-    function maxWithdraw(address controller) external view returns (uint256) {
-        uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
-        if (claimable == 0) return 0;
-        // redeem shares → assets
-        return
-            _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
-    }
-
-    /// @inheritdoc IPassthroughVault
-    function maxRedeem(address controller) external view returns (uint256) {
-        return redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
-    }
-
     //----------------------------------------------------------------------------------------------
     // ERC-7714
     //----------------------------------------------------------------------------------------------
-
-    modifier permissioned(address controller) {
-        require(isPermissioned(controller), NotMember());
-        _;
-    }
 
     /// @inheritdoc IERC7714
     function isPermissioned(address controller) public view returns (bool) {
@@ -265,39 +283,8 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     //----------------------------------------------------------------------------------------------
-    // Internal helpers
+    // Internal
     //----------------------------------------------------------------------------------------------
-
-    function _getCumulativeDepositSettled() internal view returns (uint128) {
-        return vault.maxDeposit(address(this)).toUint128() + totalDepositClaimed;
-    }
-
-    function _getCumulativeRedeemSettled() internal view returns (uint128) {
-        return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
-    }
-
-    function _claimDeposit(uint128 assets, address receiver, address controller) internal {
-        depositPosition[controller].claim(assets);
-        totalDepositClaimed += assets;
-
-        // Claim to this vault first (avoids transfer-restriction check on receiver in underlying),
-        // then forward shares to the actual receiver.
-        uint256 sharesOut = vault.deposit(assets, address(this), address(this));
-        if (sharesOut > 0) SafeTransferLib.safeTransfer(share, receiver, sharesOut);
-        emit Deposit(msg.sender, receiver, assets, sharesOut);
-    }
-
-    function _redeem(uint128 shares, address receiver, address controller) internal returns (uint128 assets) {
-        redeemPosition[controller].claim(shares);
-        totalRedeemClaimed += shares;
-
-        // Claim to this vault first (avoids transfer-restriction check on receiver in underlying),
-        // then forward assets to the actual receiver.
-        uint256 grossAssets = vault.redeem(shares, address(this), address(this));
-        if (grossAssets > 0) SafeTransferLib.safeTransfer(asset, receiver, grossAssets);
-        assets = grossAssets.toUint128();
-        emit Withdraw(msg.sender, receiver, controller, assets, shares);
-    }
 
     function _scale(uint256 amount, uint256 num, uint256 denom, MathLib.Rounding rounding)
         internal
