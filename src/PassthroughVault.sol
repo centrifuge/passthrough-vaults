@@ -26,8 +26,7 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///
 ///         When asyncDeposit is true, both 2-arg and 3-arg mint claims from the async
 ///         deposit queue. When false, they perform an immediate sync deposit into the underlying.
-///         owner must equal msg.sender in requestRedeem. Delegated redemption via ERC-20
-///         allowance is not supported.
+///         owner must equal msg.sender in requestRedeem.
 contract PassthroughVault is IPassthroughVault {
     using MathLib for *;
     using QueueLib for QueuePosition;
