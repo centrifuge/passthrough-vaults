@@ -231,6 +231,16 @@ contract PassthroughVaultRequestDepositTest is PassthroughVaultTest {
         assertEq(pending, firstAssets + ASSETS);
     }
 
+    function testErrAsyncDepositDisabled() public {
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
+        PassthroughVault syncVault = new PassthroughVault(underlying, memberlist, false, false);
+
+        vm.prank(USER);
+        vm.expectRevert(IPassthroughVault.AsyncDepositDisabled.selector);
+        syncVault.requestDeposit(ASSETS, USER, USER);
+    }
+
     function testErrInvalidController() public {
         vm.prank(USER);
         vm.expectRevert(IPassthroughVault.InvalidController.selector);

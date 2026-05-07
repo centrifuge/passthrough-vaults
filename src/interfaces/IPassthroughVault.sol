@@ -26,6 +26,7 @@ interface IPassthroughVault is IERC7714 {
     error InvalidController();
     error NotMember();
     error InsufficientClaimableShares();
+    error AsyncDepositDisabled();
 
     //----------------------------------------------------------------------------------------------
     // Immutables
