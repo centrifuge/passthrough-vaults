@@ -72,8 +72,8 @@ contract PassthroughVault is IPassthroughVault {
         returns (uint256)
     {
         require(owner == msg.sender, InvalidOwner());
-        require(controller == msg.sender, InvalidController());
         require(asyncDeposit, AsyncDepositDisabled());
+        require(controller == msg.sender, InvalidController());
 
         uint128 assets_ = assets.toUint128();
         SafeTransferLib.safeTransferFrom(asset, owner, address(this), assets_);
