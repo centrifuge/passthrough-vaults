@@ -48,45 +48,33 @@ interface IPassthroughVault is IERC7714 {
     function claimForAll() external view returns (bool);
 
     //----------------------------------------------------------------------------------------------
-    // Deposit (sync mint or async claim)
+    // Deposit (sync or async claim)
     //----------------------------------------------------------------------------------------------
 
-    /// @notice Sync deposit (asyncDeposit=false) or claim from settled async deposit queue by asset amount (asyncDeposit=true).
+    /// @notice Sync deposit (asyncDeposit=false) or claim from settled async deposit queue (asyncDeposit=true).
     ///         Pass type(uint256).max as assets to claim everything claimable.
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
     /// @notice 3-arg variant allowing a third party to claim when claimForAll is set (receiver must equal controller).
     function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares);
 
-    /// @notice Sync mint (asyncDeposit=false) or claim from settled async deposit queue by share amount (asyncDeposit=true).
-    ///         Pass type(uint256).max as shares to claim everything claimable.
-    function mint(uint256 shares, address receiver) external returns (uint256 assets);
-    /// @notice 3-arg variant allowing a third party to claim when claimForAll is set (receiver must equal controller).
-    function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets);
-
     /// @notice Max assets depositable / claimable via deposit(). For asyncDeposit=true: claimable queue balance in assets.
     function maxDeposit(address controller) external view returns (uint256);
 
-    /// @notice Max shares mintable / claimable via mint(). For asyncDeposit=true: claimable queue balance converted to shares.
-    function maxMint(address receiver) external view returns (uint256);
-
     /// @notice Preview shares out for a sync deposit. Not meaningful for async deposit — use claimableDepositRequest.
     function previewDeposit(uint256 assets) external view returns (uint256);
-
-    /// @notice Preview asset cost for a sync mint. Not meaningful for async deposit — use claimableDepositRequest.
-    function previewMint(uint256 shares) external view returns (uint256);
 
     //----------------------------------------------------------------------------------------------
     // Async deposit request
     //----------------------------------------------------------------------------------------------
 
-    /// @notice Submit an async deposit request. Reverts when asyncDeposit is false — use mint() instead.
+    /// @notice Submit an async deposit request. Reverts when asyncDeposit is false — use deposit() instead.
     /// @dev    controller and owner must equal msg.sender. Force-claims any settled balance before re-queuing.
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256 requestId);
 
     /// @notice Assets still queued and not yet claimable for controller
     function pendingDepositRequest(uint256 requestId, address controller) external view returns (uint256 pendingAssets);
 
-    /// @notice Assets settled and available to claim via mint() for controller
+    /// @notice Assets settled and available to claim via deposit() for controller
     function claimableDepositRequest(uint256 requestId, address controller)
         external
         view
@@ -100,22 +88,16 @@ interface IPassthroughVault is IERC7714 {
     /// @dev    Force-claims any settled balance before re-queuing.
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
 
-    /// @notice Claim settled redemption proceeds by asset amount. Pass type(uint256).max to claim everything claimable.
-    function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares);
-
-    /// @notice Claim settled redemption proceeds by share amount. Pass type(uint256).max to claim everything claimable.
+    /// @notice Claim settled redemption proceeds. Pass type(uint256).max to claim everything claimable.
     function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets);
 
-    /// @notice Max assets claimable via withdraw() for controller at the current settlement price
-    function maxWithdraw(address controller) external view returns (uint256);
-
-    /// @notice Max shares claimable via withdraw() for controller (denominated in shares)
+    /// @notice Max shares claimable via redeem() for controller
     function maxRedeem(address controller) external view returns (uint256);
 
     /// @notice Shares still queued and not yet claimable for controller
     function pendingRedeemRequest(uint256 requestId, address controller) external view returns (uint256 pendingShares);
 
-    /// @notice Shares settled and available to claim via withdraw() for controller
+    /// @notice Shares settled and available to claim via redeem() for controller
     function claimableRedeemRequest(uint256 requestId, address controller)
         external
         view

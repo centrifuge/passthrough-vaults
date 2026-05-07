@@ -38,10 +38,8 @@ contract PassthroughVaultTest is Test {
     function _setupMocks() internal virtual {
         vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector), abi.encode(true));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector), abi.encode(0));
-        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxWithdraw.selector), abi.encode(0));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.pendingRedeemRequest.selector), abi.encode(0));
         vm.mockCall(underlying, abi.encodeWithSelector(IUnderlyingVault.maxDeposit.selector), abi.encode(0));
-        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.maxMint.selector), abi.encode(0));
     }
 }
 
@@ -63,17 +61,16 @@ contract PassthroughVaultConstructorTest is PassthroughVaultTest {
         PassthroughVault noWhitelistVault = new PassthroughVault(underlying, address(0), false, false);
 
         asset.mint(USER, ASSETS);
-        vm.mockCall(underlying, abi.encodeWithSignature("previewMint(uint256)", uint256(SHARES)), abi.encode(ASSETS));
-        vm.mockCall(underlying, abi.encodeWithSignature("mint(uint256,address)", uint256(SHARES), address(noWhitelistVault)), abi.encode(ASSETS));
+        vm.mockCall(underlying, abi.encodeWithSignature("deposit(uint256,address)", uint256(ASSETS), address(noWhitelistVault)), abi.encode(SHARES));
         share.mint(address(noWhitelistVault), SHARES);
         vm.startPrank(USER);
         asset.approve(address(noWhitelistVault), ASSETS);
-        noWhitelistVault.mint(SHARES, USER);
+        noWhitelistVault.deposit(ASSETS, USER);
         vm.stopPrank();
     }
 }
 
-contract PassthroughVaultMintTest is PassthroughVaultTest {
+contract PassthroughVaultSyncDepositTest is PassthroughVaultTest {
     function setUp() public override {
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
         vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
@@ -81,39 +78,37 @@ contract PassthroughVaultMintTest is PassthroughVaultTest {
         _setupMocks();
     }
 
-    function testMint() public {
-        uint128 shares = 100e18;
-        uint256 previewAssets = 1000e6;
+    function testDeposit() public {
+        uint256 depositAssets = 1000e6;
+        uint128 expectedShares = 100e18;
 
-        asset.mint(USER, previewAssets);
+        asset.mint(USER, depositAssets);
         vm.prank(USER);
-        asset.approve(address(vault), previewAssets);
+        asset.approve(address(vault), depositAssets);
 
-        vm.mockCall(underlying, abi.encodeWithSignature("previewMint(uint256)", shares), abi.encode(previewAssets));
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("mint(uint256,address)", shares, address(vault)),
-            abi.encode(previewAssets)
+            abi.encodeWithSignature("deposit(uint256,address)", depositAssets, address(vault)),
+            abi.encode(expectedShares)
         );
-        vm.expectCall(underlying, abi.encodeWithSignature("mint(uint256,address)", shares, address(vault)));
-        share.mint(address(vault), shares);
+        vm.expectCall(underlying, abi.encodeWithSignature("deposit(uint256,address)", depositAssets, address(vault)));
+        share.mint(address(vault), expectedShares);
         vm.expectEmit(true, true, false, true);
-        emit IPassthroughVault.Deposit(USER, RECEIVER, previewAssets, shares);
+        emit IPassthroughVault.Deposit(USER, RECEIVER, depositAssets, expectedShares);
 
         vm.prank(USER);
-        uint256 assets = vault.mint(shares, RECEIVER);
+        uint256 sharesOut = vault.deposit(depositAssets, RECEIVER);
 
-        assertEq(assets, previewAssets);
+        assertEq(sharesOut, expectedShares);
         assertEq(asset.balanceOf(USER), 0);
     }
 
     function testErrNotMember() public {
         vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector, USER), abi.encode(false));
-        vm.mockCall(underlying, abi.encodeWithSignature("previewMint(uint256)"), abi.encode(1000e6));
 
         vm.startPrank(USER);
         vm.expectRevert(IPassthroughVault.NotMember.selector);
-        vault.mint(100e18, RECEIVER);
+        vault.deposit(1000e6, RECEIVER);
         vm.stopPrank();
     }
 }
@@ -303,34 +298,8 @@ contract PassthroughVaultDepositClaimTest is PassthroughVaultTest {
         );
     }
 
-    function testMintClaim() public {
+    function testDepositClaimCappedAtClaimable() public {
         share.mint(address(vault), SHARES);
-        vm.mockCall(
-            underlying, abi.encodeWithSelector(IPassthroughVault.maxMint.selector, address(vault)), abi.encode(SHARES)
-        );
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature(
-                "deposit(uint256,address,address)", uint256(ASSETS), address(vault), address(vault)
-            ),
-            abi.encode(SHARES)
-        );
-        vm.expectEmit(true, true, false, true);
-        emit IPassthroughVault.Deposit(USER, RECEIVER, ASSETS, SHARES);
-
-        vm.prank(USER);
-        uint256 assetsOut = vault.mint(SHARES, RECEIVER, USER);
-
-        assertEq(assetsOut, ASSETS);
-        assertEq(share.balanceOf(RECEIVER), SHARES);
-        assertEq(vault.claimableDepositRequest(0, USER), 0);
-    }
-
-    function testMintClaimMax() public {
-        share.mint(address(vault), SHARES);
-        vm.mockCall(
-            underlying, abi.encodeWithSelector(IUnderlyingVault.maxMint.selector, address(vault)), abi.encode(SHARES)
-        );
         vm.mockCall(
             underlying,
             abi.encodeWithSignature(
@@ -340,29 +309,9 @@ contract PassthroughVaultDepositClaimTest is PassthroughVaultTest {
         );
 
         vm.prank(USER);
-        uint256 assetsOut = vault.mint(type(uint256).max, RECEIVER, USER);
+        uint256 sharesOut = vault.deposit(uint256(ASSETS) * 2, RECEIVER, USER);
 
-        assertEq(assetsOut, ASSETS);
-        assertEq(share.balanceOf(RECEIVER), SHARES);
-    }
-
-    function testMintClaimCappedAtClaimable() public {
-        share.mint(address(vault), SHARES);
-        vm.mockCall(
-            underlying, abi.encodeWithSelector(IPassthroughVault.maxMint.selector, address(vault)), abi.encode(SHARES)
-        );
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature(
-                "deposit(uint256,address,address)", uint256(ASSETS), address(vault), address(vault)
-            ),
-            abi.encode(SHARES)
-        );
-
-        vm.prank(USER);
-        uint256 assetsOut = vault.mint(uint256(SHARES) * 2, RECEIVER, USER);
-
-        assertEq(assetsOut, ASSETS);
+        assertEq(sharesOut, SHARES);
         assertEq(share.balanceOf(RECEIVER), SHARES);
         assertEq(vault.claimableDepositRequest(0, USER), 0);
     }
@@ -386,19 +335,6 @@ contract PassthroughVaultDepositClaimTest is PassthroughVaultTest {
         // USER2's position [ASSETS, 2*ASSETS) starts exactly at the settlement boundary — not yet settled.
         assertEq(vault.claimableDepositRequest(0, USER), ASSETS);
         assertEq(vault.claimableDepositRequest(0, USER2), 0);
-    }
-
-    function testErrMintClaimInvalidController() public {
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert(IPassthroughVault.InvalidController.selector);
-        vault.mint(SHARES, RECEIVER, USER);
-    }
-
-    function testErrMintClaimInsufficientClaimable() public {
-        // No prior requestDeposit for USER2
-        vm.prank(USER2);
-        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
-        vault.mint(SHARES, RECEIVER, USER2);
     }
 
     function testDepositClaim() public {
@@ -482,42 +418,6 @@ contract PassthroughVaultPermissionlessDepositClaimTest is PassthroughVaultTest 
             abi.encodeWithSelector(IUnderlyingVault.maxDeposit.selector, address(vault)),
             abi.encode(ASSETS)
         );
-    }
-
-    function testPermissionlessMintClaim() public {
-        share.mint(address(vault), SHARES);
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature(
-                "deposit(uint256,address,address)", uint256(ASSETS), address(vault), address(vault)
-            ),
-            abi.encode(SHARES)
-        );
-        vm.expectEmit(true, true, false, true);
-        emit IPassthroughVault.Deposit(RECEIVER, USER, ASSETS, SHARES);
-
-        vm.prank(RECEIVER);
-        uint256 assetsOut = vault.mint(type(uint256).max, USER, USER);
-
-        assertEq(assetsOut, ASSETS);
-        assertEq(share.balanceOf(USER), SHARES);
-        assertEq(vault.claimableDepositRequest(0, USER), 0);
-    }
-
-    function testErrPermissionlessMintClaimNotAllowed() public {
-        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
-        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, true, false);
-
-        vm.prank(RECEIVER);
-        vm.expectRevert(IPassthroughVault.InvalidController.selector);
-        restrictedVault.mint(SHARES, USER, USER);
-    }
-
-    function testErrPermissionlessMintClaimInsufficientClaimable() public {
-        vm.prank(RECEIVER);
-        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
-        vault.mint(SHARES, USER2, USER2);
     }
 
     function testPermissionlessDepositClaim() public {
@@ -722,11 +622,6 @@ contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
         vm.mockCall(
             underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)), abi.encode(SHARES)
         );
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSelector(IPassthroughVault.maxWithdraw.selector, address(vault)),
-            abi.encode(ASSETS)
-        );
     }
 
     function testNewJoinerExcludedFromPastSettlement() public {
@@ -746,99 +641,6 @@ contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
         // USER2's range starts at the back; past settlement doesn't cover it
         assertEq(vault.claimableRedeemRequest(0, USER), SHARES);
         assertEq(vault.claimableRedeemRequest(0, USER2), 0);
-    }
-
-    function testWithdraw() public {
-        asset.mint(address(vault), ASSETS);
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature("redeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
-            abi.encode(ASSETS)
-        );
-        vm.expectEmit(true, true, true, true);
-        emit IPassthroughVault.Withdraw(USER, RECEIVER, USER, ASSETS, SHARES);
-
-        vm.prank(USER);
-        uint256 shares = vault.withdraw(type(uint256).max, RECEIVER, USER);
-
-        assertEq(shares, SHARES);
-        assertEq(asset.balanceOf(RECEIVER), ASSETS);
-    }
-
-    function testWithdrawExact() public {
-        asset.mint(address(vault), ASSETS);
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature("redeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
-            abi.encode(ASSETS)
-        );
-        vm.expectEmit(true, true, true, true);
-        emit IPassthroughVault.Withdraw(USER, RECEIVER, USER, ASSETS, SHARES);
-
-        vm.prank(USER);
-        uint256 shares = vault.withdraw(ASSETS, RECEIVER, USER);
-
-        assertEq(shares, SHARES);
-        assertEq(asset.balanceOf(RECEIVER), ASSETS);
-        assertEq(vault.claimableRedeemRequest(0, USER), 0);
-    }
-
-    function testWithdrawPartial() public {
-        uint128 partialAssets = ASSETS / 2;
-        uint128 partialShares = SHARES / 2;
-
-        asset.mint(address(vault), partialAssets);
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature(
-                "redeem(uint256,address,address)", uint256(partialShares), address(vault), address(vault)
-            ),
-            abi.encode(partialAssets)
-        );
-        vm.expectEmit(true, true, true, true);
-        emit IPassthroughVault.Withdraw(USER, RECEIVER, USER, partialAssets, partialShares);
-
-        vm.prank(USER);
-        uint256 shares = vault.withdraw(partialAssets, RECEIVER, USER);
-
-        assertEq(shares, partialShares);
-        assertEq(asset.balanceOf(RECEIVER), partialAssets);
-        assertEq(vault.pendingRedeemRequest(0, USER), 0); // remainder is claimable, not pending
-        assertEq(vault.claimableRedeemRequest(0, USER), SHARES - partialShares);
-    }
-
-    function testWithdrawCappedAtClaimable() public {
-        asset.mint(address(vault), ASSETS);
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature("redeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
-            abi.encode(ASSETS)
-        );
-        vm.expectEmit(true, true, true, true);
-        emit IPassthroughVault.Withdraw(USER, RECEIVER, USER, ASSETS, SHARES);
-
-        vm.prank(USER);
-        uint256 shares = vault.withdraw(uint256(ASSETS) * 2, RECEIVER, USER);
-
-        assertEq(shares, SHARES);
-        assertEq(asset.balanceOf(RECEIVER), ASSETS);
-        assertEq(vault.claimableRedeemRequest(0, USER), 0);
-    }
-
-    function testErrWithdrawInvalidController() public {
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert(IPassthroughVault.InvalidController.selector);
-        vault.withdraw(ASSETS, RECEIVER, USER);
-    }
-
-    function testErrWithdrawInsufficientClaimableShares() public {
-        vm.mockCall(
-            underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)), abi.encode(0)
-        );
-
-        vm.prank(USER);
-        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
-        vault.withdraw(ASSETS, RECEIVER, USER);
     }
 
     function testRedeem() public {
@@ -956,49 +758,6 @@ contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
         vm.mockCall(
             underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)), abi.encode(SHARES)
         );
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSelector(IPassthroughVault.maxWithdraw.selector, address(vault)),
-            abi.encode(ASSETS)
-        );
-    }
-
-    function testPermissionlessWithdraw() public {
-        asset.mint(address(vault), ASSETS);
-        vm.mockCall(
-            underlying,
-            abi.encodeWithSignature("redeem(uint256,address,address)", uint256(SHARES), address(vault), address(vault)),
-            abi.encode(ASSETS)
-        );
-        vm.expectEmit(true, true, true, true);
-        emit IPassthroughVault.Withdraw(RECEIVER, USER, USER, ASSETS, SHARES);
-
-        vm.prank(RECEIVER);
-        uint256 shares = vault.withdraw(type(uint256).max, USER, USER);
-
-        assertEq(shares, SHARES);
-        assertEq(asset.balanceOf(USER), ASSETS);
-        assertEq(vault.claimableRedeemRequest(0, USER), 0);
-    }
-
-    function testErrPermissionlessWithdrawNotAllowed() public {
-        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
-        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
-        PassthroughVault restrictedVault = new PassthroughVault(underlying, memberlist, true, false);
-
-        vm.prank(USER2);
-        vm.expectRevert(IPassthroughVault.InvalidController.selector);
-        restrictedVault.withdraw(ASSETS, USER, USER);
-    }
-
-    function testErrPermissionlessWithdrawInsufficientClaimableShares() public {
-        vm.mockCall(
-            underlying, abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)), abi.encode(0)
-        );
-
-        vm.prank(USER2);
-        vm.expectRevert(IPassthroughVault.InsufficientClaimableShares.selector);
-        vault.withdraw(ASSETS, USER, USER);
     }
 
     function testPermissionlessRedeemClaim() public {
@@ -1042,9 +801,8 @@ contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
 
 contract PassthroughVaultViewTest is PassthroughVaultTest {
     function testDepositAndRedeemViews() public view {
-        assertEq(vault.maxMint(USER), 0);
+        assertEq(vault.maxDeposit(USER), 0);
         assertEq(vault.maxRedeem(USER), 0);
-        assertEq(vault.maxWithdraw(USER), 0);
     }
 
     function testTotalAssets() public {
@@ -1089,30 +847,31 @@ contract PassthroughVaultDepositPricingFuzzTest is PassthroughVaultTest {
         );
     }
 
-    function testFuzzMintReceiverGetsRequestedShares(uint64 settledShares, uint64 requestedShares) public {
-        settledShares = uint64(bound(settledShares, 1, type(uint64).max));
-        requestedShares = uint64(bound(requestedShares, 1, settledShares));
+    function testFuzzDepositClampsToPendingClaimable(uint64 settledAssets, uint64 requestedAssets) public {
+        settledAssets = uint64(bound(settledAssets, 1, ASSETS)); // can't settle more than what was requested
+        requestedAssets = uint64(bound(requestedAssets, 1, uint64(ASSETS) * 2)); // test both under and over-requesting
 
         vm.mockCall(
             underlying,
-            abi.encodeWithSelector(IPassthroughVault.maxMint.selector, address(vault)),
-            abi.encode(settledShares)
+            abi.encodeWithSelector(IUnderlyingVault.maxDeposit.selector, address(vault)),
+            abi.encode(settledAssets)
         );
 
-        uint256 actualAssets = MathLib.mulDiv(requestedShares, uint256(ASSETS), settledShares, MathLib.Rounding.Up);
-        uint256 sharesOut = MathLib.mulDiv(actualAssets, settledShares, uint256(ASSETS), MathLib.Rounding.Down);
-
+        // claimable = min(pending=ASSETS, settled=settledAssets) = settledAssets
+        uint128 actualAssets = uint128(MathLib.min(requestedAssets, settledAssets));
+        uint256 sharesOut = actualAssets; // 1:1 mock
+        share.mint(address(vault), sharesOut);
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("deposit(uint256,address,address)", actualAssets, address(vault), address(vault)),
+            abi.encodeWithSignature("deposit(uint256,address,address)", uint256(actualAssets), address(vault), address(vault)),
             abi.encode(sharesOut)
         );
-        share.mint(address(vault), sharesOut);
 
         vm.prank(USER);
-        vault.mint(requestedShares, RECEIVER, USER);
+        uint256 shares = vault.deposit(requestedAssets, RECEIVER, USER);
 
-        assertGe(share.balanceOf(RECEIVER), requestedShares);
+        assertEq(shares, sharesOut);
+        assertEq(share.balanceOf(RECEIVER), sharesOut);
     }
 }
 
@@ -1140,29 +899,30 @@ contract PassthroughVaultRedeemPricingFuzzTest is PassthroughVaultTest {
         );
     }
 
-    function testFuzzWithdrawReceiverGetsRequestedAssets(uint64 settledAssets, uint64 requestedAssets) public {
-        settledAssets = uint64(bound(settledAssets, 1, type(uint64).max));
-        requestedAssets = uint64(bound(requestedAssets, 1, settledAssets));
+    function testFuzzRedeemClampsToPendingClaimable(uint64 settledShares, uint64 requestedShares) public {
+        settledShares = uint64(bound(settledShares, 1, SHARES)); // can't settle more than what was requested
+        requestedShares = uint64(bound(requestedShares, 1, uint64(SHARES) * 2)); // test both under and over-requesting
 
         vm.mockCall(
             underlying,
-            abi.encodeWithSelector(IPassthroughVault.maxWithdraw.selector, address(vault)),
-            abi.encode(settledAssets)
+            abi.encodeWithSelector(IPassthroughVault.maxRedeem.selector, address(vault)),
+            abi.encode(settledShares)
         );
 
-        uint256 actualShares = MathLib.mulDiv(requestedAssets, uint256(SHARES), settledAssets, MathLib.Rounding.Up);
-        uint256 assetsOut = MathLib.mulDiv(actualShares, settledAssets, uint256(SHARES), MathLib.Rounding.Down);
-
+        // claimable = min(pending=SHARES, settled=settledShares) = settledShares
+        uint128 actualShares = uint128(MathLib.min(requestedShares, settledShares));
+        uint256 assetsOut = actualShares; // 1:1 mock
         asset.mint(address(vault), assetsOut);
         vm.mockCall(
             underlying,
-            abi.encodeWithSignature("redeem(uint256,address,address)", actualShares, address(vault), address(vault)),
+            abi.encodeWithSignature("redeem(uint256,address,address)", uint256(actualShares), address(vault), address(vault)),
             abi.encode(assetsOut)
         );
 
         vm.prank(USER);
-        vault.withdraw(requestedAssets, RECEIVER, USER);
+        uint256 assets = vault.redeem(requestedShares, RECEIVER, USER);
 
-        assertGe(asset.balanceOf(RECEIVER), requestedAssets);
+        assertEq(assets, assetsOut);
+        assertEq(asset.balanceOf(RECEIVER), assetsOut);
     }
 }
