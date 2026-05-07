@@ -20,8 +20,8 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
 ///
-///         Not fully ERC-7540 compatible: deposit() and redeem() are not supported (use mint()
-///         and withdraw() instead); operator delegation is not supported (controller must
+///         Not fully ERC-7540 compatible: mint() and withdraw() are not supported, use deposit()
+///         and redeem() instead; operator delegation is not supported (controller must
 ///         equal msg.sender, except when claimForAll is set).
 ///
 ///         When asyncDeposit is true, both 2-arg and 3-arg mint claims from the async
