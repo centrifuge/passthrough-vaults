@@ -128,12 +128,14 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function pendingDepositRequest(uint256, address controller) external view returns (uint256) {
+        if (!asyncDeposit) return 0;
         uint128 settled = _getCumulativeDepositSettled();
         return depositPosition[controller].pending - depositPosition[controller].claimable(settled);
     }
 
     /// @inheritdoc IPassthroughVault
     function claimableDepositRequest(uint256, address controller) external view returns (uint256) {
+        if (!asyncDeposit) return 0;
         return depositPosition[controller].claimable(_getCumulativeDepositSettled());
     }
 
