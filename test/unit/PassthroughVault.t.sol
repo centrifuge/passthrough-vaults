@@ -231,6 +231,12 @@ contract PassthroughVaultRequestDepositTest is PassthroughVaultTest {
         assertEq(pending, firstAssets + ASSETS);
     }
 
+    function testErrInvalidController() public {
+        vm.prank(USER);
+        vm.expectRevert(IPassthroughVault.InvalidController.selector);
+        vault.requestDeposit(ASSETS, USER2, USER);
+    }
+
     function testErrInvalidOwner() public {
         vm.prank(makeAddr("stranger"));
         vm.expectRevert(IPassthroughVault.InvalidOwner.selector);
@@ -556,6 +562,12 @@ contract PassthroughVaultRequestRedeemTest is PassthroughVaultTest {
         (rangeStart, pending) = vault.redeemPosition(USER);
         assertEq(rangeStart, 0);
         assertEq(pending, firstShares + secondShares);
+    }
+
+    function testErrInvalidController() public {
+        vm.prank(USER);
+        vm.expectRevert(IPassthroughVault.InvalidController.selector);
+        vault.requestRedeem(SHARES, USER2, USER);
     }
 
     function testErrInvalidOwner() public {

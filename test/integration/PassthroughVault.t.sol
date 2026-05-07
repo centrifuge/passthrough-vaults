@@ -81,12 +81,12 @@ contract PassthroughVaultTest is IntegrationBaseTest {
     // Queue after first partial settlement (500e18 settled):
     //           0        500e18       1000e18              2000e18
     //           |XXXXXXXX|------------|---------------------|
-    //           [Settled ][ User A   ][      User B        ]
+    //           [Settled ][ User A   ][      User B         ]
     //
     // Queue after User A re-requests (500e18 new shares):
     //           0        500e18              1000e18            1500e18           2000e18         2500e18
     //           |XXXXXXXX|-------------------|------------------|-----------------|----------------|
-    //           [Settled ][ Orphaned (500e18)][         User B                   ]
+    //           [Settled ][ Orphaned (500e18)][         User B                    ]
     //                                                           [Overlap (500e18) ]
     //                                                           [        User A (1000e18)          ]
     function testRequestAgainWithPartialFulfillment() public {

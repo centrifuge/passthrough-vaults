@@ -72,6 +72,7 @@ contract PassthroughVault is IPassthroughVault {
         returns (uint256)
     {
         require(owner == msg.sender, InvalidOwner());
+        require(controller == msg.sender, InvalidController());
 
         uint128 assets_ = assets.toUint128();
         SafeTransferLib.safeTransferFrom(asset, owner, address(this), assets_);
@@ -96,7 +97,7 @@ contract PassthroughVault is IPassthroughVault {
     /// @inheritdoc IPassthroughVault
     function mint(uint256 shares, address receiver, address controller)
         public
-        permissioned(msg.sender)
+        permissioned(controller)
         returns (uint256 assets)
     {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
@@ -168,13 +169,14 @@ contract PassthroughVault is IPassthroughVault {
     //----------------------------------------------------------------------------------------------
 
     /// @inheritdoc IPassthroughVault
-    /// @dev owner must equal msg.sender, delegated redemption via ERC-20 allowance is not supported.
+    /// @dev owner and controller must equal msg.sender, delegated redemption via ERC-20 allowance is not supported.
     function requestRedeem(uint256 shares, address controller, address owner)
         external
         permissioned(controller)
         returns (uint256)
     {
         require(owner == msg.sender, InvalidOwner());
+        require(controller == msg.sender, InvalidController());
 
         uint128 shares_ = shares.toUint128();
         SafeTransferLib.safeTransferFrom(share, owner, address(this), shares_);
