@@ -329,6 +329,9 @@ contract PassthroughVaultDepositClaimTest is PassthroughVaultTest {
     function testMintClaimMax() public {
         share.mint(address(vault), SHARES);
         vm.mockCall(
+            underlying, abi.encodeWithSelector(IUnderlyingVault.maxMint.selector, address(vault)), abi.encode(SHARES)
+        );
+        vm.mockCall(
             underlying,
             abi.encodeWithSignature(
                 "deposit(uint256,address,address)", uint256(ASSETS), address(vault), address(vault)

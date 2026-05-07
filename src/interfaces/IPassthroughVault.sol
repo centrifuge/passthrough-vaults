@@ -51,17 +51,30 @@ interface IPassthroughVault is IERC7714 {
     // Deposit (sync mint or async claim)
     //----------------------------------------------------------------------------------------------
 
+    /// @notice Sync mint (asyncDeposit=false) or claim from settled async deposit queue (asyncDeposit=true).
+    ///         Pass type(uint256).max as shares to claim everything claimable.
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
+    /// @notice 3-arg variant allowing a third party to claim when claimForAll is set (receiver must equal controller).
     function mint(uint256 shares, address receiver, address controller) external returns (uint256 assets);
+
+    /// @notice Max shares mintable. For asyncDeposit=true: claimable queue balance converted to shares at current price.
     function maxMint(address receiver) external view returns (uint256);
+
+    /// @notice Preview asset cost for a sync mint. Not meaningful for async deposit — use claimableDepositRequest.
     function previewMint(uint256 shares) external view returns (uint256);
 
     //----------------------------------------------------------------------------------------------
     // Async deposit request
     //----------------------------------------------------------------------------------------------
 
+    /// @notice Submit an async deposit request. Reverts when asyncDeposit is false — use mint() instead.
+    /// @dev    controller and owner must equal msg.sender. Force-claims any settled balance before re-queuing.
     function requestDeposit(uint256 assets, address controller, address owner) external returns (uint256 requestId);
+
+    /// @notice Assets still queued and not yet claimable for controller
     function pendingDepositRequest(uint256 requestId, address controller) external view returns (uint256 pendingAssets);
+
+    /// @notice Assets settled and available to claim via mint() for controller
     function claimableDepositRequest(uint256 requestId, address controller)
         external
         view
@@ -71,12 +84,23 @@ interface IPassthroughVault is IERC7714 {
     // Async redeem
     //----------------------------------------------------------------------------------------------
 
+    /// @notice Submit an async redeem request. controller and owner must equal msg.sender.
+    /// @dev    Force-claims any settled balance before re-queuing.
     function requestRedeem(uint256 shares, address controller, address owner) external returns (uint256 requestId);
+
+    /// @notice Claim settled redemption proceeds. Pass type(uint256).max as assets to claim everything claimable.
     function withdraw(uint256 assets, address receiver, address controller) external returns (uint256 shares);
 
+    /// @notice Max assets claimable via withdraw() for controller at the current settlement price
     function maxWithdraw(address controller) external view returns (uint256);
+
+    /// @notice Max shares claimable via withdraw() for controller (denominated in shares)
     function maxRedeem(address controller) external view returns (uint256);
+
+    /// @notice Shares still queued and not yet claimable for controller
     function pendingRedeemRequest(uint256 requestId, address controller) external view returns (uint256 pendingShares);
+
+    /// @notice Shares settled and available to claim via withdraw() for controller
     function claimableRedeemRequest(uint256 requestId, address controller)
         external
         view
