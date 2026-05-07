@@ -107,18 +107,21 @@ contract PassthroughVault is IPassthroughVault {
             uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
             require(claimable > 0, InsufficientClaimableShares());
 
-            uint256 requested = _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up);
-            uint256 actualAssets = shares == type(uint256).max ? claimable : MathLib.min(requested, uint256(claimable));
+            uint256 actualAssets = shares == type(uint256).max
+                ? claimable
+                : MathLib.min(
+                    _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up),
+                    uint256(claimable)
+                );
 
             _claimDeposit(actualAssets.toUint128(), receiver, controller);
             assets = actualAssets;
         } else {
-            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), vault.previewMint(shares_));
-
             uint128 shares_ = shares.toUint128();
+            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), vault.previewMint(shares_));
             assets = vault.mint(shares_, address(this));
             SafeTransferLib.safeTransfer(share, receiver, shares_);
-            
+
             emit Deposit(msg.sender, receiver, assets, shares_);
         }
     }
@@ -199,8 +202,13 @@ contract PassthroughVault is IPassthroughVault {
         uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
-        uint256 requested = _scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up);
-        shares = assets == type(uint256).max ? claimable : MathLib.min(requested, claimable);
+        shares = assets == type(uint256).max
+            ? claimable
+            : MathLib.min(
+                _scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up),
+                claimable
+            );
+
         require(shares > 0, InsufficientClaimableShares());
 
         _redeem(shares.toUint128(), receiver, controller);
