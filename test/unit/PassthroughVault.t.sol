@@ -239,6 +239,12 @@ contract PassthroughVaultRequestDepositTest is PassthroughVaultTest {
         vm.prank(USER);
         vm.expectRevert(IPassthroughVault.AsyncDepositDisabled.selector);
         syncVault.requestDeposit(ASSETS, USER, USER);
+
+        (uint128 rangeStart, uint128 pending) = syncVault.depositPosition(USER);
+        assertEq(rangeStart, 0);
+        assertEq(pending, 0);
+
+        assertEq(syncVault.pendingDepositRequest(0, USER), 0);
     }
 
     function testErrInvalidController() public {
