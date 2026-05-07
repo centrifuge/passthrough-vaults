@@ -106,21 +106,19 @@ contract PassthroughVault is IPassthroughVault {
         if (asyncDeposit) {
             uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
             require(claimable > 0, InsufficientClaimableShares());
-            uint256 actualAssets = shares == type(uint256).max
-                ? claimable
-                // deposit shares → assets
-                : MathLib.min(
-                    _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up),
-                    uint256(claimable)
-                );
+
+            uint256 requested = _scale(shares, vault.maxDeposit(address(this)), vault.maxMint(address(this)), MathLib.Rounding.Up);
+            uint256 actualAssets = shares == type(uint256).max ? claimable : MathLib.min(requested, uint256(claimable));
+
             _claimDeposit(actualAssets.toUint128(), receiver, controller);
             assets = actualAssets;
         } else {
+            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), vault.previewMint(shares_));
+
             uint128 shares_ = shares.toUint128();
-            assets = vault.previewMint(shares_);
-            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets);
             assets = vault.mint(shares_, address(this));
             SafeTransferLib.safeTransfer(share, receiver, shares_);
+            
             emit Deposit(msg.sender, receiver, assets, shares_);
         }
     }
@@ -141,7 +139,6 @@ contract PassthroughVault is IPassthroughVault {
         if (!asyncDeposit) return vault.maxMint(address(this));
 
         uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        // deposit assets → shares
         return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
     }
 
@@ -158,6 +155,7 @@ contract PassthroughVault is IPassthroughVault {
         // then forward shares to the actual receiver.
         uint256 sharesOut = vault.deposit(assets, address(this), address(this));
         if (sharesOut > 0) SafeTransferLib.safeTransfer(share, receiver, sharesOut);
+
         emit Deposit(msg.sender, receiver, assets, sharesOut);
     }
 
@@ -201,14 +199,8 @@ contract PassthroughVault is IPassthroughVault {
         uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         require(claimable > 0, InsufficientClaimableShares());
 
-        // For type(uint256).max, claim all claimable shares directly.
-        shares = assets == type(uint256).max
-            ? claimable
-            // redeem assets → shares
-            : MathLib.min(
-                _scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up),
-                claimable
-            );
+        uint256 requested = _scale(assets, vault.maxRedeem(address(this)), vault.maxWithdraw(address(this)), MathLib.Rounding.Up);
+        shares = assets == type(uint256).max ? claimable : MathLib.min(requested, claimable);
         require(shares > 0, InsufficientClaimableShares());
 
         _redeem(shares.toUint128(), receiver, controller);
@@ -229,7 +221,6 @@ contract PassthroughVault is IPassthroughVault {
     function maxWithdraw(address controller) external view returns (uint256) {
         uint128 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
         if (claimable == 0) return 0;
-        // redeem shares → assets
         return
             _scale(claimable, vault.maxWithdraw(address(this)), vault.maxRedeem(address(this)), MathLib.Rounding.Down);
     }
@@ -248,6 +239,7 @@ contract PassthroughVault is IPassthroughVault {
         uint256 grossAssets = vault.redeem(shares, address(this), address(this));
         if (grossAssets > 0) SafeTransferLib.safeTransfer(asset, receiver, grossAssets);
         assets = grossAssets.toUint128();
+
         emit Withdraw(msg.sender, receiver, controller, assets, shares);
     }
 
