@@ -91,6 +91,34 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
+    function deposit(uint256 assets, address receiver) external permissioned(msg.sender) returns (uint256 shares) {
+        shares = deposit(assets, receiver, msg.sender);
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function deposit(uint256 assets, address receiver, address controller)
+        public
+        permissioned(controller)
+        returns (uint256 shares)
+    {
+        require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
+
+        if (asyncDeposit) {
+            uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+            require(claimable > 0, InsufficientClaimableShares());
+            uint128 actualAssets =
+                assets == type(uint256).max ? claimable : MathLib.min(assets, uint256(claimable)).toUint128();
+            shares = _claimDeposit(actualAssets, receiver, controller);
+        } else {
+            uint128 assets_ = assets.toUint128();
+            SafeTransferLib.safeTransferFrom(asset, msg.sender, address(this), assets_);
+            shares = vault.deposit(assets_, address(this));
+            SafeTransferLib.safeTransfer(share, receiver, shares);
+            emit Deposit(msg.sender, receiver, assets_, shares);
+        }
+    }
+
+    /// @inheritdoc IPassthroughVault
     function mint(uint256 shares, address receiver) external permissioned(msg.sender) returns (uint256 assets) {
         assets = mint(shares, receiver, msg.sender);
     }
@@ -140,11 +168,27 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
-    function maxMint(address controller) external view returns (uint256) {
-        if (!asyncDeposit) return vault.maxMint(address(this));
+    function maxDeposit(address controller) external view returns (uint256) {
+        if (depositPosition[controller].pending > 0) {
+            return depositPosition[controller].claimable(_getCumulativeDepositSettled());
+        }
+        if (!asyncDeposit) return vault.maxDeposit(address(this));
+        return 0;
+    }
 
-        uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-        return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
+    /// @inheritdoc IPassthroughVault
+    function maxMint(address controller) external view returns (uint256) {
+        if (depositPosition[controller].pending > 0) {
+            uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
+            return _scale(claimable, vault.maxMint(address(this)), vault.maxDeposit(address(this)), MathLib.Rounding.Down);
+        }
+        if (!asyncDeposit) return vault.maxMint(address(this));
+        return 0;
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function previewDeposit(uint256 assets) external view returns (uint256) {
+        return vault.previewDeposit(assets);
     }
 
     /// @inheritdoc IPassthroughVault
@@ -152,7 +196,7 @@ contract PassthroughVault is IPassthroughVault {
         return vault.previewMint(shares);
     }
 
-    function _claimDeposit(uint128 assets, address receiver, address controller) internal {
+    function _claimDeposit(uint128 assets, address receiver, address controller) internal returns (uint128 shares) {
         depositPosition[controller].claim(assets);
         totalDepositClaimed += assets;
 
@@ -160,6 +204,7 @@ contract PassthroughVault is IPassthroughVault {
         // then forward shares to the actual receiver.
         uint256 sharesOut = vault.deposit(assets, address(this), address(this));
         if (sharesOut > 0) SafeTransferLib.safeTransfer(share, receiver, sharesOut);
+        shares = sharesOut.toUint128();
 
         emit Deposit(msg.sender, receiver, assets, sharesOut);
     }
@@ -214,6 +259,17 @@ contract PassthroughVault is IPassthroughVault {
         require(shares > 0, InsufficientClaimableShares());
 
         _redeem(shares.toUint128(), receiver, controller);
+    }
+
+    /// @inheritdoc IPassthroughVault
+    function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
+        require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
+
+        uint256 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
+        require(claimable > 0, InsufficientClaimableShares());
+
+        uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
+        assets = _redeem(actualShares.toUint128(), receiver, controller);
     }
 
     /// @inheritdoc IPassthroughVault
