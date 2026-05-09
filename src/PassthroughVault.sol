@@ -193,7 +193,7 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
-    function redeem(uint256 shares, address receiver, address controller) external returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address controller) external permissioned(controller) returns (uint256 assets) {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
 
         uint256 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());

@@ -716,6 +716,13 @@ contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
         assertEq(vault.claimableRedeemRequest(0, USER), 0);
     }
 
+    function testErrRedeemNotMember() public {
+        vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector, USER), abi.encode(false));
+        vm.prank(USER);
+        vm.expectRevert(IPassthroughVault.NotMember.selector);
+        vault.redeem(SHARES, RECEIVER, USER);
+    }
+
     function testErrRedeemInvalidController() public {
         vm.prank(makeAddr("stranger"));
         vm.expectRevert(IPassthroughVault.InvalidController.selector);
