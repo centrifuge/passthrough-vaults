@@ -1,10 +1,8 @@
 # Passthrough Vaults
 
-A thin, immutable wrapper that multiplexes multiple investors through a single seat in a Centrifuge underlying vault. Investors hold the underlying share token directly and interact only with this contract.
+A passthrough vault is an immutable, non-custodial contract that lets many investors deposit into and redeem from a Centrifuge vault. Requests are forwarded directly to the underlying vault and settled in order. Investors receive the actual share token and the passthrough vault never holds funds on their behalf. Because the passthrough vault is the sole participant in the underlying, it can enforce its own investor permissions independently of the underlying vault's permissions.
 
 ## Overview
-
-Centrifuge vaults allow exactly one controller per vault. A passthrough vault occupies that controller seat and lets many investors participate by managing their positions internally in FIFO queues.
 
 Two underlying vault types are supported:
 
@@ -12,8 +10,6 @@ Two underlying vault types are supported:
 |---|---|---|---|
 | `SyncDepositVault` | `false` | Immediate mint against the vault | Async request → wait → withdraw |
 | `AsyncVault` | `true` | Async request → wait → mint to claim | Async request → wait → withdraw |
-
-The flag is set at construction and cannot change.
 
 The contract is fully immutable: no admin functions, no upgrades, no owner.
 
