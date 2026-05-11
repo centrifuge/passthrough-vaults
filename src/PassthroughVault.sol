@@ -105,7 +105,7 @@ contract PassthroughVault is IPassthroughVault {
 
         if (asyncDeposit) {
             uint128 claimable = depositPosition[controller].claimable(_getCumulativeDepositSettled());
-            require(claimable > 0, InsufficientClaimableShares());
+            require(claimable > 0, InsufficientClaimable());
             uint128 actualAssets =
                 assets == type(uint256).max ? claimable : MathLib.min(assets, uint256(claimable)).toUint128();
             shares = _claimDeposit(actualAssets, receiver, controller);
@@ -193,11 +193,15 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
-    function redeem(uint256 shares, address receiver, address controller) external permissioned(controller) returns (uint256 assets) {
+    function redeem(uint256 shares, address receiver, address controller)
+        external
+        permissioned(controller)
+        returns (uint256 assets)
+    {
         require(controller == msg.sender || claimForAll && controller == receiver, InvalidController());
 
         uint256 claimable = redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
-        require(claimable > 0, InsufficientClaimableShares());
+        require(claimable > 0, InsufficientClaimable());
 
         uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
         assets = _redeem(actualShares.toUint128(), receiver, controller);
@@ -235,7 +239,7 @@ contract PassthroughVault is IPassthroughVault {
     function _getCumulativeRedeemSettled() internal view returns (uint128) {
         return vault.maxRedeem(address(this)).toUint128() + totalRedeemClaimed;
     }
-    
+
     //----------------------------------------------------------------------------------------------
     // ERC-4626
     //----------------------------------------------------------------------------------------------
@@ -263,7 +267,6 @@ contract PassthroughVault is IPassthroughVault {
     function isPermissioned(address controller) public view returns (bool) {
         return address(memberlist) == address(0) || memberlist.isPermissioned(controller);
     }
-
 }
 
 contract PassthroughVaultFactory is IPassthroughVaultFactory {

@@ -19,7 +19,7 @@ interface IPassthroughVault is IERC7714 {
     error InvalidOwner();
     error InvalidController();
     error NotMember();
-    error InsufficientClaimableShares();
+    error InsufficientClaimable();
     error AsyncDepositDisabled();
 
     //----------------------------------------------------------------------------------------------
@@ -51,9 +51,9 @@ interface IPassthroughVault is IERC7714 {
     /// @notice 3-arg variant allowing a third party to claim when claimForAll is set (receiver must equal controller).
     function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares);
 
-///         Max assets depositable/claimable via deposit().
-///         When asyncDeposit=false: delegates to the underlying vault.
-///         When asyncDeposit=true: claimable queue balance in assets, or 0 if nothing is pending.
+    /// @notice Max assets depositable/claimable via deposit().
+    ///         When asyncDeposit=false: delegates to the underlying vault.
+    ///         When asyncDeposit=true: claimable queue balance in assets, or 0 if nothing is pending.
     function maxDeposit(address controller) external view returns (uint256);
 
     /// @notice Preview shares out for a sync deposit. Not meaningful for async deposit — use claimableDepositRequest.
