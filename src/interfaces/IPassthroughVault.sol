@@ -4,12 +4,6 @@ pragma solidity >=0.5.0;
 import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 import {QueuePosition, QueueLib} from "../libraries/QueueLib.sol";
 
-/// @title  IPassthroughVault
-/// @notice Sync deposit + ERC-7540 async redeem pass-through vault.
-/// @dev    The passthrough vault is the sole controller/owner in the underlying Centrifuge vault.
-///         Investors hold the underlying share token directly and interact only with this contract.
-///         Partially compatible with IERC7575 (no previewWithdraw/previewRedeem) and IERC7540
-///         (no operator delegation).
 interface IPassthroughVault is IERC7714 {
     event Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares);
     event Withdraw(
@@ -39,11 +33,11 @@ interface IPassthroughVault is IERC7714 {
     /// @dev Returns the zero address when no memberlist is configured (all addresses permitted)
     function memberlist() external view returns (IERC7714);
 
-    /// @notice When true, 2-arg and 3-arg mint claim from the async deposit queue;
+    /// @notice When true, 2-arg and 3-arg deposit claim from the async deposit queue;
     ///         when false, they perform an immediate sync deposit into the underlying vault.
     function asyncDeposit() external view returns (bool);
 
-    /// @notice When true, anyone may call mint/withdraw on behalf of a controller,
+    /// @notice When true, anyone may call deposit/redeem on behalf of a controller,
     ///         provided the receiver equals the controller.
     function claimForAll() external view returns (bool);
 
@@ -57,7 +51,9 @@ interface IPassthroughVault is IERC7714 {
     /// @notice 3-arg variant allowing a third party to claim when claimForAll is set (receiver must equal controller).
     function deposit(uint256 assets, address receiver, address controller) external returns (uint256 shares);
 
-    /// @notice Max assets depositable / claimable via deposit(). For asyncDeposit=true: claimable queue balance in assets.
+///         Max assets depositable/claimable via deposit().
+///         When asyncDeposit=false: delegates to the underlying vault.
+///         When asyncDeposit=true: claimable queue balance in assets, or 0 if nothing is pending.
     function maxDeposit(address controller) external view returns (uint256);
 
     /// @notice Preview shares out for a sync deposit. Not meaningful for async deposit — use claimableDepositRequest.

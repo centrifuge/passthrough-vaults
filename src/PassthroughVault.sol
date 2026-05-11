@@ -24,7 +24,7 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         and redeem() instead; operator delegation is not supported (controller must
 ///         equal msg.sender, except when claimForAll is set).
 ///
-///         When asyncDeposit is true, both 2-arg and 3-arg mint claims from the async
+///         When asyncDeposit is true, both 2-arg and 3-arg deposit claims from the async
 ///         deposit queue. When false, they perform an immediate sync deposit into the underlying.
 ///         owner must equal msg.sender in requestRedeem.
 contract PassthroughVault is IPassthroughVault {
@@ -261,8 +261,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IERC7714
     function isPermissioned(address controller) public view returns (bool) {
-        if (address(memberlist) == address(0)) return true;
-        return memberlist.isPermissioned(controller);
+        return address(memberlist) == address(0) || memberlist.isPermissioned(controller);
     }
 
 }

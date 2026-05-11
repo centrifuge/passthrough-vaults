@@ -27,6 +27,7 @@ library QueueLib {
         return tail + amount;
     }
 
+/// @dev amount must not exceed claimable(pos, settled); call claimable() to compute the safe amount first
     function claim(QueuePosition storage pos, uint128 amount) internal {
         pos.rangeStart += amount;
         pos.pending -= amount;
