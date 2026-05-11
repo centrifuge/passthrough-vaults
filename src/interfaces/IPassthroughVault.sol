@@ -54,6 +54,9 @@ interface IPassthroughVault is IERC7714 {
     /// @notice Max assets depositable/claimable via deposit().
     ///         When asyncDeposit=false: delegates to the underlying vault.
     ///         When asyncDeposit=true: claimable queue balance in assets, or 0 if nothing is pending.
+    /// @dev    For sync deposits, the returned value is global (not per-controller) and reflects the remaining
+    ///         deposit capacity of this vault in the underlying vault. Multiple controllers share this limit, so a
+    ///         deposit by one controller reduces the value seen by all others. This is expected behaviour.
     function maxDeposit(address controller) external view returns (uint256);
 
     /// @notice Preview shares out for a sync deposit. Not meaningful for async deposit — use claimableDepositRequest.

@@ -133,9 +133,6 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
-    /// @dev For sync deposits, the returned value is global (not per-controller) and reflects the remaining
-    ///      deposit capacity of this vault in the underlying vault. Multiple controllers share this limit, so a
-    ///      deposit by one controller reduces the value seen by all others.
     function maxDeposit(address controller) external view returns (uint256) {
         if (depositPosition[controller].pending > 0) {
             return depositPosition[controller].claimable(_getCumulativeDepositSettled());
