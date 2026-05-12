@@ -8,8 +8,8 @@ Two underlying vault types are supported:
 
 | Underlying | `asyncDeposit` flag | Deposit flow | Redeem flow |
 |---|---|---|---|
-| `SyncDepositVault` | `false` | Immediate mint against the vault | Async request → wait → withdraw |
-| `AsyncVault` | `true` | Async request → wait → mint to claim | Async request → wait → withdraw |
+| `SyncDepositVault` | `false` | Immediate deposit into the vault | Async request → wait → redeem |
+| `AsyncVault` | `true` | Async request → wait → deposit to claim | Async request → wait → redeem |
 
 The contract is fully immutable: no admin functions, no upgrades, no owner.
 
@@ -30,9 +30,9 @@ src/
 ### Sync deposit (`asyncDeposit = false`)
 
 ```
-investor → mint(shares, receiver)
+investor → deposit(assets, receiver)
          → pulls assets from msg.sender
-         → calls vault.mint on underlying
+         → calls vault.deposit on underlying
          → transfers shares to receiver
 ```
 
@@ -46,11 +46,12 @@ investor → requestDeposit(assets, controller, owner)
 
          [underlying settlement]
 
-investor → mint(shares, receiver, controller)
-         → scales requested shares to an asset amount via current price
+investor → deposit(assets, receiver, controller)
          → calls vault.deposit to claim from underlying
          → transfers shares to receiver
 ```
+
+`deposit(type(uint256).max, receiver, controller)` claims all claimable assets.
 
 ## Redeem flow (always async)
 
@@ -62,13 +63,12 @@ investor → requestRedeem(shares, controller, owner)
 
          [underlying settlement]
 
-investor → withdraw(assets, receiver, controller)
-         → scales requested assets to a share amount via current price
+investor → redeem(shares, receiver, controller)
          → calls vault.redeem to claim from underlying
          → transfers assets to receiver
 ```
 
-`withdraw(type(uint256).max, receiver, controller)` claims all claimable assets.
+`redeem(type(uint256).max, receiver, controller)` claims all claimable shares.
 
 ## Queue mechanics
 
@@ -103,8 +103,8 @@ An optional `IERC7714` memberlist can be set at construction (pass `address(0)` 
 |---|---|
 | `requestDeposit` | `controller == msg.sender` |
 | `requestRedeem` | `controller == msg.sender` |
-| `mint(3-arg)` | `controller == msg.sender` OR (`claimForAll && controller == receiver`) |
-| `withdraw` | `controller == msg.sender` OR (`claimForAll && controller == receiver`) |
+| `deposit(3-arg)` | `controller == msg.sender` OR (`claimForAll && controller == receiver`) |
+| `redeem` | `controller == msg.sender` OR (`claimForAll && controller == receiver`) |
 
 `claimForAll` enables permissionless claiming: anyone can claim on behalf of a controller, but the proceeds must go to the controller themselves (`receiver == controller`).
 
