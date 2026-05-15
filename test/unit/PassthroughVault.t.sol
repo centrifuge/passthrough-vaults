@@ -390,6 +390,12 @@ contract PassthroughVaultDepositClaimTest is PassthroughVaultTest {
         vm.expectRevert(IPassthroughVault.InsufficientClaimable.selector);
         vault.deposit(ASSETS, RECEIVER, USER2);
     }
+
+    function testMaxDepositReturnsZeroForNonPermissioned() public {
+        assertGt(vault.maxDeposit(USER), 0);
+        vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector, USER), abi.encode(false));
+        assertEq(vault.maxDeposit(USER), 0);
+    }
 }
 
 contract PassthroughVaultPermissionlessDepositClaimTest is PassthroughVaultTest {
@@ -454,6 +460,12 @@ contract PassthroughVaultPermissionlessDepositClaimTest is PassthroughVaultTest 
         vm.prank(RECEIVER);
         vm.expectRevert(IPassthroughVault.InsufficientClaimable.selector);
         vault.deposit(ASSETS, USER2, USER2);
+    }
+
+    function testErrPermissionlessDepositClaimPartial() public {
+        vm.prank(RECEIVER);
+        vm.expectRevert(IPassthroughVault.PartialClaimForbidden.selector);
+        vault.deposit(ASSETS / 2, USER, USER);
     }
 }
 
@@ -738,6 +750,12 @@ contract PassthroughVaultRedeemClaimTest is PassthroughVaultTest {
         vm.expectRevert(IPassthroughVault.InsufficientClaimable.selector);
         vault.redeem(SHARES, RECEIVER, USER);
     }
+
+    function testMaxRedeemReturnsZeroForNonPermissioned() public {
+        assertGt(vault.maxRedeem(USER), 0);
+        vm.mockCall(memberlist, abi.encodeWithSelector(IERC7714.isPermissioned.selector, USER), abi.encode(false));
+        assertEq(vault.maxRedeem(USER), 0);
+    }
 }
 
 contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
@@ -803,6 +821,12 @@ contract PassthroughVaultPermissionlessRedeemClaimTest is PassthroughVaultTest {
         vm.prank(USER2);
         vm.expectRevert(IPassthroughVault.InsufficientClaimable.selector);
         vault.redeem(SHARES, USER, USER);
+    }
+
+    function testErrPermissionlessRedeemClaimPartial() public {
+        vm.prank(RECEIVER);
+        vm.expectRevert(IPassthroughVault.PartialClaimForbidden.selector);
+        vault.redeem(SHARES / 2, USER, USER);
     }
 }
 
