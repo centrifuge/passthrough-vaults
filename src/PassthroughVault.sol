@@ -20,9 +20,9 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///
 ///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
 ///
-///         Not fully ERC-7540 compatible: mint() and withdraw() are not supported, use deposit()
+///         Not fully ERC-7540 or ERC-7714 compatible: mint() and withdraw() are not supported, use deposit()
 ///         and redeem() instead; operator delegation is not supported (controller must
-///         equal msg.sender, except when claimForAll is set).
+///         equal msg.sender, except when claimForAll is set); supportsInterface() is not implemented.
 ///
 ///         When asyncDeposit is true, both 2-arg and 3-arg deposit claims from the async
 ///         deposit queue. When false, they perform an immediate sync deposit into the underlying.
@@ -108,6 +108,7 @@ contract PassthroughVault is IPassthroughVault {
             require(claimable > 0, InsufficientClaimable());
             uint128 actualAssets =
                 assets == type(uint256).max ? claimable : MathLib.min(assets, uint256(claimable)).toUint128();
+            require(msg.sender == controller || actualAssets == claimable, PartialClaimForbidden());
             shares = _claimDeposit(actualAssets, receiver, controller);
         } else {
             uint128 assets_ = assets.toUint128();
@@ -134,6 +135,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxDeposit(address controller) external view returns (uint256) {
+        if (!isPermissioned(controller)) return 0;
         if (depositPosition[controller].pending > 0) {
             return depositPosition[controller].claimable(_getCumulativeDepositSettled());
         }
@@ -204,6 +206,7 @@ contract PassthroughVault is IPassthroughVault {
         require(claimable > 0, InsufficientClaimable());
 
         uint256 actualShares = shares == type(uint256).max ? claimable : MathLib.min(shares, claimable);
+        require(msg.sender == controller || actualShares == claimable, PartialClaimForbidden());
         assets = _redeem(actualShares.toUint128(), receiver, controller);
     }
 
@@ -220,6 +223,7 @@ contract PassthroughVault is IPassthroughVault {
 
     /// @inheritdoc IPassthroughVault
     function maxRedeem(address controller) external view returns (uint256) {
+        if (!isPermissioned(controller)) return 0;
         return redeemPosition[controller].claimable(_getCumulativeRedeemSettled());
     }
 

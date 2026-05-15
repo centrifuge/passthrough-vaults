@@ -21,6 +21,7 @@ interface IPassthroughVault is IERC7714 {
     error NotMember();
     error InsufficientClaimable();
     error AsyncDepositDisabled();
+    error PartialClaimForbidden();
 
     //----------------------------------------------------------------------------------------------
     // Immutables
