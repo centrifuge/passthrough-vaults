@@ -53,6 +53,8 @@ investor → deposit(assets, receiver, controller)
 
 `deposit(type(uint256).max, receiver, controller)` claims all claimable assets.
 
+Cancellation of pending deposit requests is not supported.
+
 ## Redeem flow (always async)
 
 ```
@@ -69,6 +71,8 @@ investor → redeem(shares, receiver, controller)
 ```
 
 `redeem(type(uint256).max, receiver, controller)` claims all claimable shares.
+
+Cancellation of pending redeem requests is not supported.
 
 ## Queue mechanics
 
