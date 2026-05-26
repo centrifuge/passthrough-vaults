@@ -120,6 +120,8 @@ Operator delegation (ERC-7540 operators) is not supported.
 
 `PassthroughVaultFactory.newVault(vault, memberlist, asyncDeposit, claimForAll)` deploys a `PassthroughVault` via `CREATE2` (salt = `keccak256(abi.encode(vault, memberlist, asyncDeposit, claimForAll))`). The deterministic address can be computed without deploying via `getVaultAddress`.
 
+The factory is permissionless: anyone can deploy a PassthroughVault wrapping any address. The deployed bytecode is identical regardless of what `vault` points to. Always verify that the wrapped vault address is a legitimate Centrifuge vault before interacting with a PassthroughVault.
+
 ## Building and testing
 
 ```shell
