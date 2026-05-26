@@ -91,7 +91,7 @@ contract PassthroughVault is IPassthroughVault {
     }
 
     /// @inheritdoc IPassthroughVault
-    function deposit(uint256 assets, address receiver) external permissioned(msg.sender) returns (uint256 shares) {
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
         shares = deposit(assets, receiver, msg.sender);
     }
 
