@@ -91,6 +91,8 @@ claimable = min(pending, max(0, settled − rangeStart))
 `_getCumulativeDepositSettled()` = `vault.maxDeposit(address(this)) + totalDepositClaimed`  
 `_getCumulativeRedeemSettled()` = `vault.maxRedeem(address(this)) + totalRedeemClaimed`
 
+**Rounding dust**: rounding in the underlying vault's claim accounting is pushed to the last investor in each settled range. That investor may see a small non-zero `pendingDepositRequest` or `pendingRedeemRequest` that cannot yet be claimed; it clears on the next fulfillment.
+
 ## Price mechanics
 
 Share prices on async deposit and redeem are derived from the settled `maxMint / maxDeposit` and `maxWithdraw / maxRedeem` ratios at the time of claiming. This causes price blending across all claimable amounts: investors who claim at the same time receive the same blended price, regardless of when they originally submitted their request, or when their request became claimable.
