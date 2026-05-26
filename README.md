@@ -11,7 +11,7 @@ Two underlying vault types are supported:
 | `SyncDepositVault` | `false` | Immediate deposit into the vault | Async request → wait → redeem |
 | `AsyncVault` | `true` | Async request → wait → deposit to claim | Async request → wait → redeem |
 
-The contract is fully immutable: no admin functions, no upgrades, no owner.
+The contract is fully immutable: no admin functions, no upgrades, no owner. However, its operation and trust model follows that of the underlying Centrifuge vault and the Centrifuge protocol. Standard pool-operator and protocol actions — membership changes, vault migrations, protocol upgrades — apply to the PassthroughVault just as they would to any other participant in the underlying vault.
 
 ## Files
 
