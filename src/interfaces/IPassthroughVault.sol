@@ -107,8 +107,13 @@ interface IPassthroughVault is IERC7714 {
     // Views
     //----------------------------------------------------------------------------------------------
 
+    /// @notice Total assets managed by the vault (delegated to underlying vault)
     function totalAssets() external view returns (uint256);
+
+    /// @notice Convert assets to shares at the current underlying vault exchange rate
     function convertToShares(uint256 assets) external view returns (uint256);
+
+    /// @notice Convert shares to assets at the current underlying vault exchange rate
     function convertToAssets(uint256 shares) external view returns (uint256);
 
     /// @notice Cumulative assets ever claimed from the async deposit queue
