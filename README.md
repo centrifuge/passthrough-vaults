@@ -99,7 +99,7 @@ Share prices on async deposit and redeem are derived from the settled `maxMint /
 
 ### Memberlist
 
-An optional `IERC7714` memberlist can be set at construction (pass `address(0)` to allow all). Membership is checked on the **controller** for all state-mutating calls.
+An optional `IERC7714` memberlist can be set at construction (pass `address(0)` to allow all). Membership is checked on the **controller** for all state-mutating calls, including claim paths (`deposit`, `redeem`). Revocation freezes in-flight claims: if a controller is removed from the memberlist after submitting a request but before claiming, their settled position is inaccessible until re-admitted.
 
 ### Controller rules
 
