@@ -18,7 +18,10 @@ import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 ///         Both async deposit and async redeem use independent FIFO waterfalls. Each request
 ///         assigns the investor a contiguous range in the global queue for that direction.
 ///
-///         Contract is fully immutable: no admin, no upgrades, no escape hatch.
+///         Contract is fully immutable: no admin, no upgrades, no escape hatch. However, the economic 
+///         state it tracks, lives in the underlying vault and remains subject to that vault's manager and 
+///         to Centrifuge governance (see the README trust-model notes). The immutability is of the wrapper, 
+///         not of the wrapped position.
 ///
 ///         Not fully ERC-7540 or ERC-7714 compatible: mint() and withdraw() are not supported, use deposit()
 ///         and redeem() instead; operator delegation is not supported (controller must
