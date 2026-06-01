@@ -107,8 +107,17 @@ interface IPassthroughVault is IERC7714 {
     // Views
     //----------------------------------------------------------------------------------------------
 
+    /// @notice Total assets managed by the vault (delegated to underlying vault)
     function totalAssets() external view returns (uint256);
+
+    /// @notice Spot conversion using the current epoch price from the underlying vault.
+    ///         Not a preview of deposit() or redeem(): async claims use a blended price derived
+    ///         from the settled amounts across all passthrough investors, which can differ from spot.
     function convertToShares(uint256 assets) external view returns (uint256);
+
+    /// @notice Spot conversion using the current epoch price from the underlying vault.
+    ///         Not a preview of deposit() or redeem(): async claims use a blended price derived
+    ///         from the settled amounts across all passthrough investors, which can differ from spot.
     function convertToAssets(uint256 shares) external view returns (uint256);
 
     /// @notice Cumulative assets ever claimed from the async deposit queue
