@@ -134,3 +134,32 @@ The factory is permissionless: anyone can deploy a PassthroughVault wrapping any
 forge build
 forge test
 ```
+
+## Deployment
+
+### Factory (deterministic, same address on every chain)
+
+`script/DeployPassthroughVaultFactory.s.sol` deploys `PassthroughVaultFactory` through the canonical CREATE2 deployer (`0x4e59...b4956c`) with a fixed salt (`keccak256("centrifuge-passthrough-vaults")`). The address depends only on the salt and init code, not on the deployer, so the factory lands at the **same address on every chain**.
+
+```shell
+forge script script/DeployPassthroughVaultFactory.s.sol:DeployPassthroughVaultFactory \
+  --rpc-url "$RPC" --sender "$DEPLOYER" --ledger \
+  --broadcast --verify --etherscan-api-key "$ETHERSCAN_API_KEY"
+```
+
+Run the same command per chain (Ethereum, Base, ...), swapping `--rpc-url`. Drop `--broadcast` (and `--verify`) for a dry run first. Swap `--ledger` for `--account <name>` (keystore) or `--private-key "$PK"` to use a different signer.
+
+> CREATE2 keys the address to the init code too, so build every chain from the same commit and compiler settings (`foundry.toml`) or the addresses will diverge.
+
+### Creating a vault
+
+Once the factory is live, mint a passthrough vault for an underlying Centrifuge vault. Use the zero address for `memberlist` to allow all, and `asyncDeposit = true` when the underlying is an async vault.
+
+```shell
+cast send <FACTORY_ADDRESS> \
+  "newVault(address,address,bool,bool)" \
+  <UNDERLYING_VAULT> 0x0000000000000000000000000000000000000000 true false \
+  --rpc-url "$RPC" --ledger --from "$DEPLOYER"
+```
+
+The vault address is deterministic per parameter set and can be precomputed with `getVaultAddress(...)` without deploying.
