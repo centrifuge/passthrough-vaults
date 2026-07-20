@@ -5,8 +5,8 @@ import {ERC20} from "protocol/misc/ERC20.sol";
 import {IERC7714} from "protocol/misc/interfaces/IERC7540.sol";
 import {MathLib} from "protocol/misc/libraries/MathLib.sol";
 
-import {PassthroughVault} from "../../src/PassthroughVault.sol";
-import {IPassthroughVault} from "../../src/interfaces/IPassthroughVault.sol";
+import {PassthroughVault, PassthroughVaultFactory} from "../../src/PassthroughVault.sol";
+import {IPassthroughVault, IPassthroughVaultFactory} from "../../src/interfaces/IPassthroughVault.sol";
 import {IUnderlyingVault} from "../../src/interfaces/IUnderlyingVault.sol";
 
 import "forge-std/Test.sol";
@@ -957,5 +957,36 @@ contract PassthroughVaultRedeemPricingFuzzTest is PassthroughVaultTest {
 
         assertEq(assets, assetsOut);
         assertEq(asset.balanceOf(RECEIVER), assetsOut);
+    }
+}
+
+contract PassthroughVaultFactoryTest is Test {
+    ERC20 asset = new ERC20(6);
+    ERC20 share = new ERC20(18);
+    address underlying = address(new IsContract());
+    address memberlist = address(new IsContract());
+
+    PassthroughVaultFactory factory;
+
+    function setUp() public {
+        factory = new PassthroughVaultFactory();
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.asset.selector), abi.encode(address(asset)));
+        vm.mockCall(underlying, abi.encodeWithSelector(IPassthroughVault.share.selector), abi.encode(address(share)));
+    }
+
+    function testNewVault(bool asyncDeposit_, bool claimForAll_) public {
+        address expectedAddr = factory.getVaultAddress(underlying, memberlist, asyncDeposit_, claimForAll_);
+
+        vm.expectEmit(true, true, false, true);
+        emit IPassthroughVaultFactory.DeployPassthroughVault(expectedAddr, underlying, memberlist, asyncDeposit_, claimForAll_);
+
+        IPassthroughVault vault = factory.newVault(underlying, memberlist, asyncDeposit_, claimForAll_);
+
+        assertEq(address(vault), expectedAddr);
+        assertEq(vault.asset(), address(asset));
+        assertEq(vault.share(), address(share));
+        assertEq(address(vault.memberlist()), memberlist);
+        assertEq(vault.asyncDeposit(), asyncDeposit_);
+        assertEq(vault.claimForAll(), claimForAll_);
     }
 }

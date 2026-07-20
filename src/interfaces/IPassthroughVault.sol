@@ -142,6 +142,10 @@ interface IPassthroughVault is IERC7714 {
 /// @title  IPassthroughVaultFactory
 /// @notice Factory for deploying passthrough vault contracts
 interface IPassthroughVaultFactory {
+    event DeployPassthroughVault(
+        address indexed vault, address indexed underlyingVault, address memberlist, bool asyncDeposit, bool claimForAll
+    );
+
     /// @notice Deploys a new passthrough vault wrapping `vault`
     function newVault(address vault, address memberlist, bool asyncDeposit, bool claimForAll)
         external
