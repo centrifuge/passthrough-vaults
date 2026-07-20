@@ -280,10 +280,11 @@ contract PassthroughVaultFactory is IPassthroughVaultFactory {
     /// @inheritdoc IPassthroughVaultFactory
     function newVault(address vault, address memberlist, bool asyncDeposit, bool claimForAll)
         external
-        returns (IPassthroughVault)
+        returns (IPassthroughVault passthroughVault)
     {
         bytes32 salt = keccak256(abi.encode(vault, memberlist, asyncDeposit, claimForAll));
-        return new PassthroughVault{salt: salt}(vault, memberlist, asyncDeposit, claimForAll);
+        passthroughVault = new PassthroughVault{salt: salt}(vault, memberlist, asyncDeposit, claimForAll);
+        emit DeployPassthroughVault(address(passthroughVault), vault, memberlist, asyncDeposit, claimForAll);
     }
 
     /// @inheritdoc IPassthroughVaultFactory
